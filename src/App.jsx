@@ -50,15 +50,21 @@ export default function App() {
       setStatusMsg('Enter your Claude API key first', 'error');
       return;
     }
+    setNewsResults([]);   // clear stale results immediately
+    setAiHeadlines([]);
     showLoader('Searching News', `Looking up: "${query}"`);
     setStatusMsg('Searching...', 'active');
     try {
       const results = await apiSearchNews(query, apiKey);
-      setNewsResults(results);
-      setStatusMsg(`Found ${results.length} results`, 'success');
+      if (results.length === 0) {
+        setStatusMsg('No results — try a different query', 'error');
+      } else {
+        setNewsResults(results);
+        setStatusMsg(`Found ${results.length} results — click one to use it`, 'success');
+      }
     } catch (err) {
       console.error(err);
-      setStatusMsg('Search failed — check API key & connection', 'error');
+      setStatusMsg(`Search failed: ${err.message}`, 'error');
     }
     hideLoader();
   };
@@ -80,15 +86,20 @@ export default function App() {
       setStatusMsg('Enter your Claude API key first', 'error');
       return;
     }
+    setAiHeadlines([]);
     showLoader('AI Generating', 'Writing punchy viral headlines...');
     setStatusMsg('Generating headlines...', 'active');
     try {
       const headlines = await generateHeadlines(topic, apiKey);
-      setAiHeadlines(headlines);
-      setStatusMsg('Headlines generated', 'success');
+      if (headlines.length === 0) {
+        setStatusMsg('No headlines generated — try again', 'error');
+      } else {
+        setAiHeadlines(headlines);
+        setStatusMsg('Headlines generated — click one to use it', 'success');
+      }
     } catch (err) {
       console.error(err);
-      setStatusMsg('AI generation failed', 'error');
+      setStatusMsg(`Headline gen failed: ${err.message}`, 'error');
     }
     hideLoader();
   };

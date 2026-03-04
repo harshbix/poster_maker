@@ -9,7 +9,7 @@ export const INITIAL_STATE = {
     format: 'square',
     headline: 'MANCHESTER CITY IN DANGER OF RELEGATION FROM THE EPL',
     subtext: 'Club sits 15th with 8 consecutive losses this season',
-    brandName: 'ANTIGRAVITY',
+    brandName: 'FAROLS',
     rendered: false,
 };
 

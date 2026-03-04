@@ -4,6 +4,10 @@
 
 const API_BASE = 'https://api.anthropic.com/v1/messages';
 
+// Models
+const MODEL_SEARCH = 'claude-opus-4-5';      // supports web_search tool
+const MODEL_TEXT = 'claude-haiku-4-5';     // fast & cheap for headline gen
+
 function getHeaders(apiKey) {
     return {
         'Content-Type': 'application/json',
@@ -13,12 +17,30 @@ function getHeaders(apiKey) {
     };
 }
 
-function parseJSON(text) {
-    const clean = text.replace(/```json|```/g, '').trim();
-    // Extract first JSON array or object
-    const match = clean.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-    if (!match) return null;
-    try { return JSON.parse(match[0]); } catch { return null; }
+// Extract all text blocks from the response (skips tool_use / tool_result blocks)
+function extractText(content = []) {
+    return content
+        .filter(block => block.type === 'text')
+        .map(block => block.text || '')
+        .join('\n');
+}
+
+// Robustly pull the first JSON array out of a string
+function parseJSONArray(raw) {
+    if (!raw) return null;
+    // Strip markdown fences
+    const clean = raw.replace(/```(?:json)?/gi, '').trim();
+    // Find the outermost [ ... ]
+    const start = clean.indexOf('[');
+    if (start === -1) return null;
+    // Walk to find matching close bracket
+    let depth = 0, end = -1;
+    for (let i = start; i < clean.length; i++) {
+        if (clean[i] === '[') depth++;
+        else if (clean[i] === ']') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) return null;
+    try { return JSON.parse(clean.slice(start, end + 1)); } catch { return null; }
 }
 
 export async function searchNews(query, apiKey) {
@@ -26,20 +48,39 @@ export async function searchNews(query, apiKey) {
         method: 'POST',
         headers: getHeaders(apiKey),
         body: JSON.stringify({
-            model: 'claude-opus-4-5',
-            max_tokens: 1000,
+            model: MODEL_SEARCH,
+            max_tokens: 2000,
             tools: [{ type: 'web_search_20250305', name: 'web_search' }],
             messages: [{
                 role: 'user',
-                content: `Search for recent news about: "${query}". Return ONLY a JSON array (no markdown, no backticks) of 4 news items, each with: title (string, punchy headline max 12 words), source (string), summary (string, 1 sentence fact), date (string). Example: [{"title":"...","source":"...","summary":"...","date":"..."}]`,
+                content: `Search the web for recent news about: "${query}".
+
+After searching, respond with ONLY a raw JSON array (no markdown, no backticks, no explanation) like this:
+[{"title":"...","source":"...","summary":"...","date":"..."},...]
+
+- 4 items max
+- title: punchy, max 12 words, ALL CAPS
+- source: news outlet name
+- summary: 1 factual sentence
+- date: e.g. "March 2025"`,
             }],
         }),
     });
 
-    if (!res.ok) throw new Error(`API error ${res.status}`);
+    if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error?.message || `HTTP ${res.status}`);
+    }
+
     const data = await res.json();
-    const text = data.content?.map(i => i.text || '').join('') ?? '';
-    return parseJSON(text) ?? [];
+    const text = extractText(data.content);
+    const parsed = parseJSONArray(text);
+
+    if (!parsed || parsed.length === 0) {
+        throw new Error('No results parsed — Claude response was empty or malformed');
+    }
+
+    return parsed;
 }
 
 export async function generateHeadlines(topic, apiKey) {
@@ -47,20 +88,25 @@ export async function generateHeadlines(topic, apiKey) {
         method: 'POST',
         headers: getHeaders(apiKey),
         body: JSON.stringify({
-            model: 'claude-opus-4-5',
-            max_tokens: 500,
+            model: MODEL_TEXT,
+            max_tokens: 600,
             messages: [{
                 role: 'user',
-                content: `Generate 4 viral social media poster headlines for topic: "${topic}".
-Style: like Instagram pages Pubity, Bleacher Report, House of Highlights.
-Rules: ALL CAPS, max 8 words each, punchy, factual, no emojis.
-Return ONLY JSON array of strings. Example: ["HEADLINE ONE","HEADLINE TWO","HEADLINE THREE","HEADLINE FOUR"]`,
+                content: `Generate 4 viral social media poster headlines for: "${topic}"
+Style: Pubity / Bleacher Report / House of Highlights
+Rules: ALL CAPS, max 8 words, punchy, factual, no emojis
+Output ONLY a raw JSON array of strings, no markdown:
+["HEADLINE ONE","HEADLINE TWO","HEADLINE THREE","HEADLINE FOUR"]`,
             }],
         }),
     });
 
-    if (!res.ok) throw new Error(`API error ${res.status}`);
+    if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error?.message || `HTTP ${res.status}`);
+    }
+
     const data = await res.json();
-    const text = data.content?.map(i => i.text || '').join('') ?? '';
-    return parseJSON(text) ?? [];
+    const text = extractText(data.content);
+    return parseJSONArray(text) ?? [];
 }

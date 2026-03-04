@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { STYLE_OPTIONS, COLOR_SWATCHES } from '../lib/posterRenderer';
 
 function UploadZone({ id, icon, label, image, onChange }) {
@@ -42,30 +42,45 @@ export default function Sidebar({
     onFormatChange,
     onRender,
 }) {
-    const queryRef = useRef(null);
+    const [query, setQuery] = useState('');
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter') onNewsSearch(queryRef.current?.value);
-    };
+    const handleSearch = () => onNewsSearch(query);
+    const handleKeyDown = (e) => { if (e.key === 'Enter') onNewsSearch(query); };
 
     return (
         <aside className="sidebar">
 
             {/* API KEY */}
-            <div>
-                <div className="section-label">API Configuration</div>
-                <div className="field-group">
-                    <label>Claude API Key</label>
+            <div className="api-card">
+                <div className="api-card-header">
+                    <span className="api-card-icon">🔑</span>
+                    <span className="api-card-title">Claude API Key</span>
+                    <span className={`api-status-pill${apiKey.trim() ? ' connected' : ''}`}>
+                        {apiKey.trim() ? '● Connected' : '○ Not set'}
+                    </span>
+                </div>
+                <div className="api-input-wrapper">
+                    <span className="api-input-icon">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                    </span>
                     <input
-                        type="text"
-                        placeholder="sk-ant-..."
+                        className="api-input"
+                        type="password"
+                        placeholder="sk-ant-api03-..."
                         value={apiKey}
                         onChange={e => onApiKeyChange(e.target.value)}
+                        autoComplete="off"
+                        spellCheck={false}
                     />
-                    <p style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                        Required for AI news search & headline generation.
-                    </p>
                 </div>
+                <p className="api-hint">
+                    Powers news search &amp; AI headline generation.{' '}
+                    <a href="https://console.anthropic.com/keys" target="_blank" rel="noreferrer" className="api-link">
+                        Get a key ↗
+                    </a>
+                </p>
             </div>
 
             <hr className="divider" />
@@ -78,13 +93,14 @@ export default function Sidebar({
                         <input
                             type="text"
                             id="news-query"
-                            ref={queryRef}
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
                             placeholder="e.g. Manchester City relegation..."
                             onKeyDown={handleKeyDown}
                         />
                         <button
                             className="btn btn-secondary btn-sm"
-                            onClick={() => onNewsSearch(queryRef.current?.value)}
+                            onClick={handleSearch}
                             disabled={loading}
                         >
                             GO
