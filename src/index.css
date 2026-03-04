@@ -310,7 +310,8 @@ textarea {
 .workspace {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  min-height: calc(100vh - 61px);
+  height: calc(100vh - 61px);
+  overflow: hidden;
 }
 
 .sidebar {
@@ -331,6 +332,7 @@ textarea {
   padding: 36px 32px;
   gap: 20px;
   background: #0d0d0d;
+  overflow-y: auto;
 }
 
 /* ---- FORMAT TABS ---- */
