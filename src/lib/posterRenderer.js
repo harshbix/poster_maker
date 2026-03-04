@@ -40,7 +40,7 @@ function wrapText(ctx, text, maxWidth) {
 
 export function renderPoster({ canvas, state }) {
     const ctx = canvas.getContext('2d');
-    const { bgImage, thumbImage, logoImage, style, accentColor, format, headline, subtext, brandName } = state;
+    const { bgImage, bgTransform, thumbImage, thumbTransform, logoImage, style, accentColor, format, headline, subtext, brandName } = state;
 
     const isStory = format === 'story';
     const W = 1080;
@@ -55,10 +55,22 @@ export function renderPoster({ canvas, state }) {
         const img = bgImage;
         const ir = img.width / img.height;
         const cr = W / H;
-        let sx = 0, sy = 0, sw = img.width, sh = img.height;
-        if (ir > cr) { sw = img.height * cr; sx = (img.width - sw) / 2; }
-        else { sh = img.width / cr; sy = (img.height - sh) / 2; }
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+
+        let baseScale = 1;
+        if (ir > cr) { baseScale = H / img.height; }
+        else { baseScale = W / img.width; }
+
+        const scale = baseScale * (bgTransform?.scale || 1);
+        const dw = img.width * scale;
+        const dh = img.height * scale;
+
+        const px = bgTransform?.x ?? 0.5;
+        const py = bgTransform?.y ?? 0.5;
+
+        const dx = (W - dw) * px;
+        const dy = (H - dh) * py;
+
+        ctx.drawImage(img, dx, dy, dw, dh);
     } else {
         const grad = ctx.createLinearGradient(0, 0, W, H);
         grad.addColorStop(0, theme.bg);
@@ -67,25 +79,28 @@ export function renderPoster({ canvas, state }) {
         ctx.fillRect(0, 0, W, H);
     }
 
-    // ---- DARK OVERLAY ----
-    ctx.fillStyle = theme.overlay;
-    ctx.fillRect(0, 0, W, H);
+    // ---- DARK FILTERS (TOGGLEABLE) ----
+    if (state.showFilters !== false) {
+        // ---- DARK OVERLAY ----
+        ctx.fillStyle = theme.overlay;
+        ctx.fillRect(0, 0, W, H);
 
-    // ---- VIGNETTE ----
-    const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.8);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, W, H);
+        // ---- VIGNETTE ----
+        const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.8);
+        vignette.addColorStop(0, 'rgba(0,0,0,0)');
+        vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, W, H);
 
-    // ---- BOTTOM GRADIENT ----
-    const bottomH = isStory ? 700 : 460;
-    const bottomGrad = ctx.createLinearGradient(0, H - bottomH, 0, H);
-    bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    bottomGrad.addColorStop(0.4, 'rgba(0,0,0,0.85)');
-    bottomGrad.addColorStop(1, 'rgba(0,0,0,0.97)');
-    ctx.fillStyle = bottomGrad;
-    ctx.fillRect(0, H - bottomH, W, bottomH);
+        // ---- BOTTOM GRADIENT ----
+        const bottomH = isStory ? 700 : 460;
+        const bottomGrad = ctx.createLinearGradient(0, H - bottomH, 0, H);
+        bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
+        bottomGrad.addColorStop(0.4, 'rgba(0,0,0,0.85)');
+        bottomGrad.addColorStop(1, 'rgba(0,0,0,0.97)');
+        ctx.fillStyle = bottomGrad;
+        ctx.fillRect(0, H - bottomH, W, bottomH);
+    }
 
     // ---- THUMBNAIL (if provided) ----
     if (thumbImage) {
@@ -99,10 +114,22 @@ export function renderPoster({ canvas, state }) {
         ctx.clip();
 
         const ti = thumbImage;
-        const tr = Math.min(ti.width, ti.height);
-        const tsx = (ti.width - tr) / 2;
-        const tsy = (ti.height - tr) / 2;
-        ctx.drawImage(ti, tsx, tsy, tr, tr, tx, ty, thumbSize, thumbSize);
+        const ir = ti.width / ti.height;
+        let baseScale = 1;
+        if (ir > 1) { baseScale = thumbSize / ti.height; }
+        else { baseScale = thumbSize / ti.width; }
+
+        const scale = baseScale * (thumbTransform?.scale || 1);
+        const dw = ti.width * scale;
+        const dh = ti.height * scale;
+
+        const px = thumbTransform?.x ?? 0.5;
+        const py = thumbTransform?.y ?? 0.5;
+
+        const dx = tx + (thumbSize - dw) * px;
+        const dy = ty + (thumbSize - dh) * py;
+
+        ctx.drawImage(ti, dx, dy, dw, dh);
         ctx.restore();
 
         ctx.strokeStyle = theme.stripe;

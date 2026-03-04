@@ -119,7 +119,17 @@ export default function Sidebar({
                         />
                     )}
 
-                    <label style={{ marginTop: 8 }}>Thumbnail / Context Image</label>
+                    <label style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Thumbnail / Context Image
+                        {state.thumbImage && (
+                            <button
+                                onClick={() => onFieldChange('thumbImage', null)}
+                                style={{ background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.3)', color: '#ff8888', padding: '4px 8px', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}
+                            >
+                                ✕ Remove
+                            </button>
+                        )}
+                    </label>
                     <UploadZone
                         id="thumb-zone"
                         icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>}
@@ -151,6 +161,24 @@ export default function Sidebar({
             {/* DESIGN SECTION */}
             <div>
                 <div className="section-label">Design</div>
+
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ margin: 0 }}>Dark Filters (Overlay/Gradient)</label>
+                        <button
+                            onClick={() => onFieldChange('showFilters', state.showFilters === false)}
+                            style={{
+                                background: state.showFilters !== false ? 'rgba(255,50,50,0.15)' : 'rgba(50,255,50,0.15)',
+                                border: `1px solid ${state.showFilters !== false ? 'rgba(255,50,50,0.3)' : 'rgba(50,255,50,0.3)'}`,
+                                color: state.showFilters !== false ? '#ff8888' : '#88ff88',
+                                padding: '4px 8px', fontSize: 10, cursor: 'pointer', borderRadius: 4
+                            }}
+                        >
+                            {state.showFilters !== false ? '✕ Remove Filters' : '➕ Add Filters'}
+                        </button>
+                    </div>
+                </div>
+
                 <label>Format Options</label>
                 <div className="style-grid">
                     {[

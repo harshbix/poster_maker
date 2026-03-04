@@ -13,6 +13,7 @@ export const INITIAL_STATE = {
     subtext: 'Club sits 15th with 8 consecutive losses this season',
     brandName: 'FAROLS',
     rendered: false,
+    showFilters: true,
 };
 
 export function usePosterState() {

@@ -35,7 +35,9 @@ export default function CanvasArea({ state, onFormatSwitch, onStatusUpdate }) {
         const brand = (state.brandName || 'poster').replace(/\s+/g, '_');
         link.download = `${brand}_${date}_poster.png`;
         link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
         onStatusUpdate('Downloaded!', 'success');
     };
 
@@ -133,7 +135,9 @@ const CanvasAreaWithRef = forwardRef(function CanvasAreaRef(props, ref) {
         const brand = (state.brandName || 'poster').replace(/\s+/g, '_');
         link.download = `${brand}_${date}_poster.png`;
         link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
         onStatusUpdate('Downloaded!', 'success');
     };
 
