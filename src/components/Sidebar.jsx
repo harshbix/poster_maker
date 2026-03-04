@@ -23,18 +23,36 @@ function ResultItem({ title, meta, onClick }) {
     );
 }
 
+function ImageTransformControls({ label, transform, onChange }) {
+    if (!transform) return null;
+    return (
+        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, marginTop: -4, marginBottom: 16, border: '1px solid rgba(255,255,255,0.05)' }}>
+            <label style={{ fontSize: 10, marginBottom: 12, display: 'block', color: 'var(--accent)' }}>{label}</label>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Pan X</label>
+                    <input type="range" min="0" max="1" step="0.01" value={transform.x}
+                        onChange={e => onChange({ ...transform, x: parseFloat(e.target.value) })} />
+                </div>
+                <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Pan Y</label>
+                    <input type="range" min="0" max="1" step="0.01" value={transform.y}
+                        onChange={e => onChange({ ...transform, y: parseFloat(e.target.value) })} />
+                </div>
+            </div>
+            <div>
+                <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Zoom / Scale</label>
+                <input type="range" min="0.5" max="3" step="0.05" value={transform.scale}
+                    onChange={e => onChange({ ...transform, scale: parseFloat(e.target.value) })} />
+            </div>
+        </div>
+    );
+}
+
 export default function Sidebar({
     state,
     status,
     loading,
-    newsResults,
-    aiHeadlines,
-    apiKey,
-    onApiKeyChange,
-    onNewsSearch,
-    onSelectNews,
-    onAiEnhance,
-    onSelectHeadline,
     onImageUpload,
     onFieldChange,
     onStyleChange,
@@ -42,100 +60,24 @@ export default function Sidebar({
     onFormatChange,
     onRender,
 }) {
-    const [query, setQuery] = useState('');
-
-    const handleSearch = () => onNewsSearch(query);
-    const handleKeyDown = (e) => { if (e.key === 'Enter') onNewsSearch(query); };
-
     return (
         <aside className="sidebar">
 
-            {/* API KEY */}
-            <div className="api-card">
-                <div className="api-card-header">
-                    <span className="api-card-icon">🔑</span>
-                    <span className="api-card-title">Claude API Key</span>
-                    <span className={`api-status-pill${apiKey.trim() ? ' connected' : ''}`}>
-                        {apiKey.trim() ? '● Connected' : '○ Not set'}
-                    </span>
-                </div>
-                <div className="api-input-wrapper">
-                    <span className="api-input-icon">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                    </span>
-                    <input
-                        className="api-input"
-                        type="password"
-                        placeholder="sk-ant-api03-..."
-                        value={apiKey}
-                        onChange={e => onApiKeyChange(e.target.value)}
-                        autoComplete="off"
-                        spellCheck={false}
-                    />
-                </div>
-                <p className="api-hint">
-                    Powers news search &amp; AI headline generation.{' '}
-                    <a href="https://console.anthropic.com/keys" target="_blank" rel="noreferrer" className="api-link">
-                        Get a key ↗
-                    </a>
-                </p>
-            </div>
-
-            <hr className="divider" />
-
-            {/* NEWS SEARCH */}
+            {/* CONTENT SECTION */}
             <div>
-                <div className="section-label">Search News Topic</div>
-                <div className="field-group">
-                    <div className="search-row">
-                        <input
-                            type="text"
-                            id="news-query"
-                            value={query}
-                            onChange={e => setQuery(e.target.value)}
-                            placeholder="e.g. Manchester City relegation..."
-                            onKeyDown={handleKeyDown}
-                        />
-                        <button
-                            className="btn btn-secondary btn-sm"
-                            onClick={handleSearch}
-                            disabled={loading}
-                        >
-                            GO
-                        </button>
-                    </div>
-                </div>
-
-                {newsResults.length > 0 && (
-                    <div className="search-results">
-                        {newsResults.map((r, i) => (
-                            <ResultItem
-                                key={i}
-                                title={r.title}
-                                meta={`${r.source} · ${r.date}`}
-                                onClick={() => onSelectNews(r)}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            <hr className="divider" />
-
-            {/* HEADLINE */}
-            <div>
-                <div className="section-label">Headline</div>
+                <div className="section-label">Content</div>
                 <div className="field-group">
                     <label>Main Title</label>
                     <textarea
                         id="headline"
-                        rows={2}
+                        rows={4}
                         value={state.headline}
                         onChange={e => onFieldChange('headline', e.target.value)}
-                        placeholder="MANCHESTER CITY IN DANGER OF RELEGATION FROM THE EPL"
+                        placeholder="*MANCHESTER CITY* IN DANGER OF RELEGATION FROM THE EPL"
                     />
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: -2, marginBottom: 6 }}>
+                        Tip: Wrap words in *asterisks* to highlight them in color.
+                    </p>
                     <label>Subtext (optional)</label>
                     <input
                         type="text"
@@ -144,94 +86,72 @@ export default function Sidebar({
                         onChange={e => onFieldChange('subtext', e.target.value)}
                         placeholder="Club sits 15th after 8 consecutive losses"
                     />
-                </div>
-            </div>
-
-            <hr className="divider" />
-
-            {/* IMAGES */}
-            <div>
-                <div className="section-label">Images</div>
-                <div className="field-group">
-                    <label>Background / Main Image</label>
-                    <UploadZone
-                        id="bg-zone"
-                        icon="🖼"
-                        label="Drop or click to upload"
-                        image={state.bgImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'bg')}
-                    />
-                    <label style={{ marginTop: 8 }}>Thumbnail / Person Image (optional)</label>
-                    <UploadZone
-                        id="thumb-zone"
-                        icon="👤"
-                        label="Drop or click to upload"
-                        image={state.thumbImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'thumb')}
-                    />
-                </div>
-            </div>
-
-            <hr className="divider" />
-
-            {/* LOGO */}
-            <div>
-                <div className="section-label">Your Logo / Watermark</div>
-                <div className="field-group">
-                    <UploadZone
-                        id="logo-zone"
-                        icon="©"
-                        label="Upload your logo (PNG with transparency preferred)"
-                        image={state.logoImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'logo')}
-                    />
-                    <label>Or type brand name</label>
+                    <label>Brand Name Watermark</label>
                     <input
                         type="text"
                         id="brand-name"
                         value={state.brandName}
                         onChange={e => onFieldChange('brandName', e.target.value)}
-                        placeholder="ANTIGRAVITY"
+                        placeholder="FAROLS"
                     />
                 </div>
             </div>
 
             <hr className="divider" />
 
-            {/* STYLE */}
+            {/* IMAGES SECTION */}
             <div>
-                <div className="section-label">Poster Style</div>
-                <div className="style-grid">
-                    {STYLE_OPTIONS.map(s => (
-                        <div
-                            key={s.id}
-                            className={`style-card${state.style === s.id ? ' active' : ''}`}
-                            onClick={() => onStyleChange(s.id)}
-                        >
-                            <div className="style-name" style={{ color: s.color }}>{s.label}</div>
-                            <div className="style-sub">{s.sub}</div>
-                        </div>
-                    ))}
-                </div>
-
-                <label style={{ marginTop: 14 }}>Accent Color</label>
-                <div className="color-row" style={{ marginTop: 8 }}>
-                    {COLOR_SWATCHES.map(color => (
-                        <div
-                            key={color}
-                            className={`color-swatch${state.accentColor === color ? ' active' : ''}`}
-                            style={{ background: color }}
-                            onClick={() => onAccentChange(color)}
+                <div className="section-label">Images</div>
+                <div className="field-group">
+                    <label>Main Image</label>
+                    <UploadZone
+                        id="bg-zone"
+                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>}
+                        label="Drop or click to upload"
+                        image={state.bgImage}
+                        onChange={e => onImageUpload(e.target.files[0], 'bg')}
+                    />
+                    {state.bgImage && (
+                        <ImageTransformControls
+                            label="Main Image Tracking"
+                            transform={state.bgTransform}
+                            onChange={t => onFieldChange('bgTransform', t)}
                         />
-                    ))}
+                    )}
+
+                    <label style={{ marginTop: 8 }}>Thumbnail / Context Image</label>
+                    <UploadZone
+                        id="thumb-zone"
+                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>}
+                        label="Drop or click to upload"
+                        image={state.thumbImage}
+                        onChange={e => onImageUpload(e.target.files[0], 'thumb')}
+                    />
+                    {state.thumbImage && (
+                        <ImageTransformControls
+                            label="Thumbnail Tracking"
+                            transform={state.thumbTransform}
+                            onChange={t => onFieldChange('thumbTransform', t)}
+                        />
+                    )}
+
+                    <label style={{ marginTop: 8 }}>Logo File (Optional)</label>
+                    <UploadZone
+                        id="logo-zone"
+                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" x2="8" y1="8" y2="16" /></svg>}
+                        label="Upload PNG with transparency"
+                        image={state.logoImage}
+                        onChange={e => onImageUpload(e.target.files[0], 'logo')}
+                    />
                 </div>
             </div>
 
             <hr className="divider" />
 
-            {/* FORMAT */}
+            {/* DESIGN SECTION */}
             <div>
-                <div className="section-label">Format</div>
+                <div className="section-label">Design</div>
+                <label>Format Options</label>
                 <div className="style-grid">
                     {[
                         { id: 'square', label: 'Square', sub: '1080 × 1080' },
@@ -247,33 +167,33 @@ export default function Sidebar({
                         </div>
                     ))}
                 </div>
-            </div>
 
-            <hr className="divider" />
-
-            {/* AI HEADLINES */}
-            <div>
-                <div className="section-label">AI Headline Generator</div>
-                <div className="field-group">
-                    <button className="btn btn-secondary" onClick={onAiEnhance} disabled={loading}>
-                        Generate Punchy Headlines
-                    </button>
+                <label style={{ marginTop: 8 }}>Template / Theme</label>
+                <div className="style-grid" style={{ marginBottom: 4 }}>
+                    {STYLE_OPTIONS.map(s => (
+                        <div
+                            key={s.id}
+                            className={`style-card${state.style === s.id ? ' active' : ''}`}
+                            onClick={() => onStyleChange(s.id)}
+                        >
+                            <div className="style-name" style={{ color: s.color }}>{s.label}</div>
+                            <div className="style-sub">{s.sub}</div>
+                        </div>
+                    ))}
                 </div>
-                {aiHeadlines.length > 0 && (
-                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {aiHeadlines.map((h, i) => (
-                            <div
-                                key={i}
-                                className="ai-headline-item"
-                                onClick={() => onSelectHeadline(h)}
-                            >
-                                {h}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
 
+                <label style={{ marginTop: 8 }}>Accent Override</label>
+                <div className="color-row">
+                    {COLOR_SWATCHES.map(color => (
+                        <div
+                            key={color}
+                            className={`color-swatch${state.accentColor === color ? ' active' : ''}`}
+                            style={{ background: color }}
+                            onClick={() => onAccentChange(color)}
+                        />
+                    ))}
+                </div>
+            </div>
             <hr className="divider" />
 
             {/* STATUS */}
@@ -287,6 +207,6 @@ export default function Sidebar({
                 ⚡ Render Poster
             </button>
 
-        </aside>
+        </aside >
     );
 }

@@ -4,18 +4,14 @@ import Sidebar from './components/Sidebar';
 import { CanvasAreaWithRef } from './components/CanvasArea';
 import LoadingOverlay from './components/LoadingOverlay';
 import { usePosterState } from './hooks/usePosterState';
-import { searchNews as apiSearchNews, generateHeadlines } from './lib/api';
 import { renderPoster } from './lib/posterRenderer';
 import './index.css';
 
 export default function App() {
   const { state, update, loadImageFromFile } = usePosterState();
-  const [apiKey, setApiKey] = useState('');
   const [status, setStatus] = useState({ msg: 'Ready — fill in details and render', type: '' });
   const [loading, setLoading] = useState(false);
   const [loader, setLoader] = useState({ title: '', sub: '' });
-  const [newsResults, setNewsResults] = useState([]);
-  const [aiHeadlines, setAiHeadlines] = useState([]);
 
   const canvasRef = useRef(null);
 
@@ -42,72 +38,6 @@ export default function App() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Handle news search
-  const handleNewsSearch = async (query) => {
-    if (!query?.trim()) return;
-    if (!apiKey.trim()) {
-      setStatusMsg('Enter your Claude API key first', 'error');
-      return;
-    }
-    setNewsResults([]);   // clear stale results immediately
-    setAiHeadlines([]);
-    showLoader('Searching News', `Looking up: "${query}"`);
-    setStatusMsg('Searching...', 'active');
-    try {
-      const results = await apiSearchNews(query, apiKey);
-      if (results.length === 0) {
-        setStatusMsg('No results — try a different query', 'error');
-      } else {
-        setNewsResults(results);
-        setStatusMsg(`Found ${results.length} results — click one to use it`, 'success');
-      }
-    } catch (err) {
-      console.error(err);
-      setStatusMsg(`Search failed: ${err.message}`, 'error');
-    }
-    hideLoader();
-  };
-
-  const handleSelectNews = (r) => {
-    update({ headline: r.title.toUpperCase(), subtext: r.summary });
-    setNewsResults([]);
-    setStatusMsg('Topic selected — render when ready', 'success');
-  };
-
-  // Handle AI enhance
-  const handleAiEnhance = async () => {
-    const topic = document.getElementById('news-query')?.value || state.headline;
-    if (!topic.trim()) {
-      setStatusMsg('Enter a topic or headline first', 'error');
-      return;
-    }
-    if (!apiKey.trim()) {
-      setStatusMsg('Enter your Claude API key first', 'error');
-      return;
-    }
-    setAiHeadlines([]);
-    showLoader('AI Generating', 'Writing punchy viral headlines...');
-    setStatusMsg('Generating headlines...', 'active');
-    try {
-      const headlines = await generateHeadlines(topic, apiKey);
-      if (headlines.length === 0) {
-        setStatusMsg('No headlines generated — try again', 'error');
-      } else {
-        setAiHeadlines(headlines);
-        setStatusMsg('Headlines generated — click one to use it', 'success');
-      }
-    } catch (err) {
-      console.error(err);
-      setStatusMsg(`Headline gen failed: ${err.message}`, 'error');
-    }
-    hideLoader();
-  };
-
-  const handleSelectHeadline = (h) => {
-    update({ headline: h });
-    setStatusMsg('Headline selected', 'success');
-  };
 
   // Handle render
   const handleRender = useCallback(() => {
@@ -164,14 +94,6 @@ export default function App() {
           state={state}
           status={status}
           loading={loading}
-          newsResults={newsResults}
-          aiHeadlines={aiHeadlines}
-          apiKey={apiKey}
-          onApiKeyChange={setApiKey}
-          onNewsSearch={handleNewsSearch}
-          onSelectNews={handleSelectNews}
-          onAiEnhance={handleAiEnhance}
-          onSelectHeadline={handleSelectHeadline}
           onImageUpload={handleImageUpload}
           onFieldChange={handleFieldChange}
           onStyleChange={handleStyleChange}

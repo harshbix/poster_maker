@@ -43,6 +43,112 @@ body {
   margin-bottom: 12px;
 }
 
+/* ---- ACCORDION ---- */
+.accordion {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.accordion-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.accordion-title {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accordion-title svg {
+  color: var(--accent);
+}
+
+.accordion-icon {
+  color: var(--muted);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accordion-icon.open {
+  transform: rotate(180deg);
+}
+
+.accordion-body {
+  padding: 0 16px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- TOGGLE SWITCH ---- */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle-switch {
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(16px);
+}
+
 label {
   font-size: 12px;
   font-weight: 600;
@@ -55,66 +161,79 @@ label {
 input[type="text"],
 textarea,
 select {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text);
   font-family: var(--font-body);
   font-size: 14px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   outline: none;
   width: 100%;
-  transition: border-color 0.2s;
-  border-radius: 0;
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+input[type="text"]::placeholder,
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
 }
 
 input[type="text"]:focus,
 textarea:focus {
   border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.05);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
 }
 
 textarea {
   resize: vertical;
-  min-height: 70px;
+  min-height: 80px;
 }
 
 /* ---- BUTTONS ---- */
 .btn {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  padding: 12px 20px;
+  padding: 14px 20px;
   border: none;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   justify-content: center;
-  border-radius: 0;
+  border-radius: 8px;
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, rgba(0, 180, 255, 1) 100%);
   color: #000;
   width: 100%;
+  box-shadow: 0 4px 14px rgba(0, 212, 255, 0.2);
 }
 
 .btn-primary:hover {
-  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn-secondary {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.03);
   color: var(--accent);
-  border: 1.5px solid var(--accent);
+  border: 1px solid rgba(0, 212, 255, 0.3);
   width: 100%;
 }
 
 .btn-secondary:hover {
-  background: var(--accent);
-  color: #000;
+  background: rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
 }
 
 .btn-danger {
@@ -123,14 +242,16 @@ textarea {
 }
 
 .btn-sm {
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
   width: auto;
 }
 
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* ---- DIVIDER ---- */
@@ -174,19 +295,21 @@ textarea {
 
 /* ---- UPLOAD ZONES ---- */
 .upload-zone {
-  border: 1.5px dashed var(--border);
-  padding: 20px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.15);
+  padding: 24px 20px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
 }
 
 .upload-zone:hover,
 .upload-zone.dragover {
   border-color: var(--accent);
-  background: rgba(0, 212, 255, 0.04);
+  background: rgba(0, 212, 255, 0.05);
+  transform: translateY(-1px);
 }
 
 .upload-zone input[type="file"] {
@@ -217,37 +340,41 @@ textarea {
 .style-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 12px;
 }
 
 .style-card {
-  border: 1.5px solid var(--border);
-  padding: 12px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 8px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
-  background: var(--card);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
 }
 
-.style-card:hover,
+.style-card:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
 .style-card.active {
   border-color: var(--accent);
-}
-
-.style-card.active {
   background: rgba(0, 212, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.15);
 }
 
 .style-card .style-name {
   font-family: var(--font-head);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .style-card .style-sub {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--muted);
   margin-top: 3px;
 }
@@ -255,21 +382,29 @@ textarea {
 /* ---- COLOR SWATCHES ---- */
 .color-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .color-swatch {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: border-color 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
 }
 
 .color-swatch.active {
   border-color: #fff;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 
 /* ---- SEARCH / RESULT ITEMS ---- */
@@ -568,6 +703,34 @@ header {
   text-transform: uppercase;
   color: var(--text);
   flex: 1;
+}
+
+/* ---- RANGE SLIDERS ---- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: -5px;
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.4);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
 }
 
 .api-status-pill {

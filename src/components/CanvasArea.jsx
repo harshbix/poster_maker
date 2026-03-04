@@ -25,7 +25,7 @@ export default function CanvasArea({ state, onFormatSwitch, onStatusUpdate }) {
     // Re-render when relevant state changes
     useEffect(() => {
         if (state.rendered) doRender();
-    }, [state.style, state.accentColor, state.format, doRender, state.rendered]);
+    }, [state.style, state.accentColor, state.format, state.bgTransform, state.thumbTransform, doRender, state.rendered]);
 
     const download = () => {
         const canvas = canvasRef.current;
@@ -37,19 +37,6 @@ export default function CanvasArea({ state, onFormatSwitch, onStatusUpdate }) {
         link.href = canvas.toDataURL('image/png');
         link.click();
         onStatusUpdate('Downloaded!', 'success');
-    };
-
-    const copyToClipboard = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.toBlob(async (blob) => {
-            try {
-                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                onStatusUpdate('Copied to clipboard!', 'success');
-            } catch {
-                onStatusUpdate('Copy not supported in this browser', 'error');
-            }
-        });
     };
 
     return (
@@ -93,13 +80,6 @@ export default function CanvasArea({ state, onFormatSwitch, onStatusUpdate }) {
             <div className="export-row">
                 <button className="btn btn-primary" onClick={download} style={{ flex: 1 }}>
                     ⬇ Download PNG
-                </button>
-                <button
-                    className="btn btn-secondary"
-                    onClick={copyToClipboard}
-                    style={{ flex: '0 0 auto', padding: '12px 16px', fontSize: 12 }}
-                >
-                    Copy
                 </button>
             </div>
 
@@ -143,7 +123,7 @@ const CanvasAreaWithRef = forwardRef(function CanvasAreaRef(props, ref) {
 
     useEffect(() => {
         if (state.rendered) doRender();
-    }, [state.style, state.accentColor, state.format, doRender, state.rendered]);
+    }, [state.style, state.accentColor, state.format, state.bgTransform, state.thumbTransform, doRender, state.rendered]);
 
     const download = () => {
         const canvas = canvasRef.current;
@@ -155,19 +135,6 @@ const CanvasAreaWithRef = forwardRef(function CanvasAreaRef(props, ref) {
         link.href = canvas.toDataURL('image/png');
         link.click();
         onStatusUpdate('Downloaded!', 'success');
-    };
-
-    const copyToClipboard = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.toBlob(async (blob) => {
-            try {
-                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                onStatusUpdate('Copied to clipboard!', 'success');
-            } catch {
-                onStatusUpdate('Copy not supported in this browser', 'error');
-            }
-        });
     };
 
     return (
@@ -211,13 +178,6 @@ const CanvasAreaWithRef = forwardRef(function CanvasAreaRef(props, ref) {
             <div className="export-row">
                 <button className="btn btn-primary" onClick={download} style={{ flex: 1 }}>
                     ⬇ Download PNG
-                </button>
-                <button
-                    className="btn btn-secondary"
-                    onClick={copyToClipboard}
-                    style={{ flex: '0 0 auto', padding: '12px 16px', fontSize: 12 }}
-                >
-                    Copy
                 </button>
             </div>
 

@@ -71,9 +71,9 @@ function drawBgZone(ctx, zone, data, theme, W, H) {
         const res = checkResolution(data.bgImage, W, H);
         if (res.warning) warnings.push({ zoneId: zone.id, message: res.warning });
         if (!res.ok) {
-            drawBlurredBackground(ctx, data.bgImage, W, H, 14);
+            drawBlurredBackground(ctx, data.bgImage, W, H, 14, data.bgTransform);
         } else {
-            drawCropped(ctx, data.bgImage, 0, 0, W, H);
+            drawCropped(ctx, data.bgImage, 0, 0, W, H, data.bgTransform);
         }
     } else {
         const grad = ctx.createLinearGradient(0, 0, W, H);
@@ -158,7 +158,7 @@ function drawThumbnailZone(ctx, zone, data, colors, W, H) {
     const r = zone.radius || zone.height / 2;
     const cx = (x === 'fill' ? W - zone.width - 48 : x) + r;
     const cy = y + r;
-    drawCircularImage(ctx, data.thumbImage, cx, cy, r, { color: colors.accent, width: 5 });
+    drawCircularImage(ctx, data.thumbImage, cx, cy, r, { color: colors.accent, width: 5 }, data.thumbTransform);
 }
 
 function drawHeadlineZone(ctx, zone, data, colors, W, H) {

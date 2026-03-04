@@ -153,17 +153,18 @@ export function renderPoster({ canvas, state }) {
     const lines = wrapText(ctx, headlineUpper, maxWText);
 
     let currentY = textY + fontSize;
-    lines.forEach((line, li) => {
+    lines.forEach((line) => {
         const words = line.split(' ');
-        let x = pad;
-        words.forEach((word, wi) => {
-            if (li === 0) {
-                ctx.fillStyle = (wi % 2 === 0) ? theme.textMain : theme.stripe;
-            } else {
-                ctx.fillStyle = (li % 2 === 0) ? theme.textMain : theme.stripe;
-            }
-            ctx.fillText(word + ' ', x, currentY);
-            x += ctx.measureText(word + ' ').width;
+        const lineWidth = ctx.measureText(line.replace(/\*/g, '')).width; // measure without asterisks
+        let x = pad + (maxWText - lineWidth) / 2; // Center alignment
+
+        words.forEach((word) => {
+            const isKey = word.includes('*'); // manual highlight trigger
+            const cleanWord = word.replace(/\*/g, ''); // strip for drawing
+
+            ctx.fillStyle = isKey ? theme.stripe : theme.textMain;
+            ctx.fillText(cleanWord + ' ', x, currentY);
+            x += ctx.measureText(cleanWord + ' ').width; // Add space incrementally
         });
         currentY += fontSize * 1.05;
     });
@@ -175,7 +176,9 @@ export function renderPoster({ canvas, state }) {
         ctx.fillStyle = 'rgba(240,240,240,0.72)';
         const subLines = wrapText(ctx, subtext, maxWText);
         subLines.forEach((line, i) => {
-            ctx.fillText(line, pad, currentY + 16 + (subSize * 1.3 * i));
+            const lineWidth = ctx.measureText(line).width;
+            const x = pad + (maxWText - lineWidth) / 2; // Center alignment
+            ctx.fillText(line, x, currentY + 16 + (subSize * 1.3 * i));
         });
     }
 }

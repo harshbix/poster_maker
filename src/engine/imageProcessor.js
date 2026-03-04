@@ -5,15 +5,15 @@
 
 /**
  * Compute source crop rect that fills (targetW × targetH) centered on the image.
- * Respects an optional focal point (normalized 0–1).
+ * Respects an optional transform with x/y focal points (normalized 0–1) and scale multiplier.
  *
  * @param {{ width: number, height: number }} img
  * @param {number} targetW
  * @param {number} targetH
- * @param {{ x: number, y: number } | null} focal
+ * @param {{ x?: number, y?: number, scale?: number } | null} transform
  * @returns {{ sx: number, sy: number, sw: number, sh: number }}
  */
-export function computeCrop(img, targetW, targetH, focal = null) {
+export function computeCrop(img, targetW, targetH, transform = null) {
     const imgR = img.width / img.height;
     const tgtR = targetW / targetH;
     let sw, sh;
@@ -28,14 +28,19 @@ export function computeCrop(img, targetW, targetH, focal = null) {
         sh = img.width / tgtR;
     }
 
+    // Apply zoom scaling
+    const scale = transform?.scale || 1;
+    sw /= scale;
+    sh /= scale;
+
     // Default: center crop
     let sx = (img.width - sw) / 2;
     let sy = (img.height - sh) / 2;
 
-    // Apply focal point offset (clamped so crop stays in bounds)
-    if (focal) {
-        const focalX = focal.x * img.width;
-        const focalY = focal.y * img.height;
+    // Apply focal point offset (clamped so crop stays in bounds of original image pixels)
+    if (transform) {
+        const focalX = (transform.x ?? 0.5) * img.width;
+        const focalY = (transform.y ?? 0.5) * img.height;
         sx = Math.max(0, Math.min(img.width - sw, focalX - sw / 2));
         sy = Math.max(0, Math.min(img.height - sh, focalY - sh / 2));
     }
@@ -44,10 +49,10 @@ export function computeCrop(img, targetW, targetH, focal = null) {
 }
 
 /**
- * Draw an image into (destX, destY, destW, destH) using center-crop.
+ * Draw an image into (destX, destY, destW, destH) using center-crop + optional transform.
  */
-export function drawCropped(ctx, img, destX, destY, destW, destH, focal = null) {
-    const { sx, sy, sw, sh } = computeCrop(img, destW, destH, focal);
+export function drawCropped(ctx, img, destX, destY, destW, destH, transform = null) {
+    const { sx, sy, sw, sh } = computeCrop(img, destW, destH, transform);
     ctx.drawImage(img, sx, sy, sw, sh, destX, destY, destW, destH);
 }
 
@@ -62,7 +67,7 @@ export function circularMask(ctx, cx, cy, r) {
 }
 
 /**
- * Draw an image inside a circle, center-cropped.
+ * Draw an image inside a circle, center-cropped + optional transform.
  * Draws a border ring after restoring clip.
  *
  * @param {CanvasRenderingContext2D} ctx
@@ -71,11 +76,12 @@ export function circularMask(ctx, cx, cy, r) {
  * @param {number} cy - circle center y
  * @param {number} r  - circle radius
  * @param {{ color: string, width: number } | null} border
+ * @param {{ x?: number, y?: number, scale?: number } | null} transform
  */
-export function drawCircularImage(ctx, img, cx, cy, r, border = null) {
+export function drawCircularImage(ctx, img, cx, cy, r, border = null, transform = null) {
     ctx.save();
     circularMask(ctx, cx, cy, r);
-    drawCropped(ctx, img, cx - r, cy - r, r * 2, r * 2);
+    drawCropped(ctx, img, cx - r, cy - r, r * 2, r * 2, transform);
     ctx.restore();
 
     if (border) {
@@ -123,17 +129,18 @@ export function checkResolution(img, targetW, targetH) {
  * @param {number} W
  * @param {number} H
  * @param {number} blurRadius - logical blur (4–20 recommended)
+ * @param {{ x?: number, y?: number, scale?: number } | null} transform
  */
-export function drawBlurredBackground(ctx, img, W, H, blurRadius = 12) {
+export function drawBlurredBackground(ctx, img, W, H, blurRadius = 12, transform = null) {
     // Use CanvasFilter if supported (Chrome 92+)
     if (typeof ctx.filter !== 'undefined') {
         ctx.filter = `blur(${blurRadius}px)`;
         // Draw slightly oversized to hide blur edges
         const pad = blurRadius * 2;
-        drawCropped(ctx, img, -pad, -pad, W + pad * 2, H + pad * 2);
+        drawCropped(ctx, img, -pad, -pad, W + pad * 2, H + pad * 2, transform);
         ctx.filter = 'none';
     } else {
         // Fallback: draw normally (blur not supported)
-        drawCropped(ctx, img, 0, 0, W, H);
+        drawCropped(ctx, img, 0, 0, W, H, transform);
     }
 }

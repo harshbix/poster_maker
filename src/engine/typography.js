@@ -159,21 +159,35 @@ export function drawFittedText(ctx, fit, zone, constraints, colors, alternateWor
 
     lines.forEach((line, li) => {
         const y = zone.y + li * fontSize * lineHeight;
-        if (alternateWords) {
+        if (smartHighlighting) {
+            const stopWords = new Set([
+                'THE', 'A', 'AN', 'IN', 'ON', 'AT', 'OF', 'WITH', 'TO', 'FOR', 'AND', 'OR', 'NOR', 'BUT',
+                'IS', 'ARE', 'WAS', 'WERE', 'BE', 'BEING', 'BEEN', 'BY', 'AS', 'IT', 'ITS', 'HE', 'HIS',
+                'HIM', 'SHE', 'HER', 'HERS', 'THEY', 'THEIR', 'THEIRS', 'THEM', 'WE', 'OUR', 'OURS', 'US',
+                'I', 'MY', 'MINE', 'ME', 'YOU', 'YOUR', 'YOURS', 'THIS', 'THAT', 'THESE', 'THOSE', 'DO',
+                'DOES', 'DID', 'DONE', 'HAVE', 'HAS', 'HAD', 'WILL', 'WOULD', 'CAN', 'COULD', 'SHALL',
+                'SHOULD', 'MAY', 'MIGHT', 'MUST', 'OUT', 'UP', 'DOWN', 'OVER', 'UNDER', 'AGAINST', 'FROM',
+                'INTO', 'ABOUT', 'THROUGH', 'AFTER', 'BEFORE', 'BETWEEN', 'AMONG', 'DURING', 'UNTIL',
+                'SO', 'IF', 'BECAUSE', 'NOT', 'NO', 'THAN', 'THEN', 'NOW', 'HOW', 'WHY', 'WHEN', 'WHERE',
+                'WHO', 'WHICH', 'WHAT', 'WHOM', 'WHOSE', 'ALL', 'ANY', 'BOTH', 'EACH', 'FEW', 'MORE', 'MOST',
+                'OTHER', 'SOME', 'SUCH', 'OWN', 'SAME', 'TOO', 'VERY', 'OFF'
+            ]);
+            const isKeyWord = (w) => w.length > 1 && !stopWords.has(w);
+
             const words = line.split(' ');
-            let x = zone.x;
+            let x = startX === 'center' ? zone.x + (zone.width - ctx.measureText(line).width) / 2 : startX;
             ctx.textAlign = 'left';
             words.forEach((word, wi) => {
-                // Alternate between main and accent per word (line 0: word-level; line N: line-level)
-                const useAccent = li === 0 ? wi % 2 === 1 : li % 2 === 1;
-                ctx.fillStyle = useAccent ? colors.accent : colors.main;
+                const cleanWord = word.replace(/[.,!?()[\]{}"':;]/g, '').toUpperCase();
+                ctx.fillStyle = isKeyWord(cleanWord) ? colors.accent : colors.main;
                 const drawn = word + (wi < words.length - 1 ? ' ' : '');
                 ctx.fillText(drawn, x, y);
                 x += ctx.measureText(drawn).width;
             });
         } else {
             ctx.fillStyle = colors.main;
-            ctx.fillText(line, startX, y);
+            const x = startX === 'center' ? zone.x + (zone.width - ctx.measureText(line).width) / 2 : startX;
+            ctx.fillText(line, x, y);
         }
     });
 
