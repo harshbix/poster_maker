@@ -1,186 +1,167 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { STYLE_OPTIONS, COLOR_SWATCHES } from '../lib/posterRenderer';
+import { INITIAL_STATE } from '../hooks/usePosterState';
 
-function UploadZone({ id, icon, label, image, onChange }) {
+// ---- Image Thumbnail Chip ---- //
+function ImageChip({ item, onRemove }) {
     return (
-        <div className="upload-zone" id={id}>
-            <input type="file" accept="image/*" onChange={onChange} />
-            {image
-                ? <img className="preview-img" src={image.src} alt="preview" />
-                : <span style={{ fontSize: 28, display: 'block', marginBottom: 8 }}>{icon}</span>
-            }
-            <p>{label}</p>
+        <div className="img-chip">
+            <img src={item.src} alt="uploaded" className="img-chip-thumb" />
+            <button className="img-chip-remove" onClick={() => onRemove(item.id)} title="Remove">✕</button>
         </div>
     );
 }
 
-function ResultItem({ title, meta, onClick }) {
-    return (
-        <div className="result-item" onClick={onClick}>
-            <div className="r-title">{title}</div>
-            {meta && <div className="r-meta">{meta}</div>}
-        </div>
-    );
-}
+// ---- Upload Drop Zone ---- //
+function DropZone({ onFiles }) {
+    const inputRef = useRef(null);
+    const [over, setOver] = useState(false);
 
-function ImageTransformControls({ label, transform, onChange }) {
-    if (!transform) return null;
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setOver(false);
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) onFiles(files);
+    };
+
     return (
-        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, marginTop: -4, marginBottom: 16, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <label style={{ fontSize: 10, marginBottom: 12, display: 'block', color: 'var(--accent)' }}>{label}</label>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Pan X</label>
-                    <input type="range" min="0" max="1" step="0.01" value={transform.x}
-                        onChange={e => onChange({ ...transform, x: parseFloat(e.target.value) })} />
-                </div>
-                <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Pan Y</label>
-                    <input type="range" min="0" max="1" step="0.01" value={transform.y}
-                        onChange={e => onChange({ ...transform, y: parseFloat(e.target.value) })} />
-                </div>
+        <div
+            className={`drop-zone${over ? ' dragover' : ''}`}
+            onDragOver={e => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+        >
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => onFiles(e.target.files)}
+            />
+            <div className="drop-zone-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
             </div>
-            <div>
-                <label style={{ fontSize: 9, marginBottom: 4, display: 'block' }}>Zoom / Scale</label>
-                <input type="range" min="0.5" max="3" step="0.05" value={transform.scale}
-                    onChange={e => onChange({ ...transform, scale: parseFloat(e.target.value) })} />
-            </div>
+            <p className="drop-zone-label">Drop images here or <span>click to browse</span></p>
+            <p className="drop-zone-sub">Add as many as you want — PNG, JPG, WebP</p>
         </div>
     );
 }
 
+// ---- Main Sidebar ---- //
 export default function Sidebar({
     state,
     status,
-    loading,
-    onImageUpload,
+    onFiles,
+    onRemoveImage,
     onFieldChange,
     onStyleChange,
     onAccentChange,
     onFormatChange,
-    onRender,
+    onShuffle,
+    onDownload,
 }) {
+    const hasImages = state.images.length > 0;
+
     return (
         <aside className="sidebar">
 
-            {/* CONTENT SECTION */}
+            {/* ── SHUFFLE BUTTON (TOP CTA) ── */}
+            <button
+                id="btn-shuffle"
+                className="btn btn-shuffle"
+                onClick={onShuffle}
+                disabled={!hasImages && !state.headline}
+            >
+                <span className="shuffle-icon">⟳</span>
+                Shuffle Layout
+            </button>
+
+            {/* ── IMAGES ── */}
+            <div>
+                <div className="section-label">Images</div>
+
+                {state.images.length > 0 && (
+                    <div className="img-chip-grid">
+                        {state.images.map(item => (
+                            <ImageChip key={item.id} item={item} onRemove={onRemoveImage} />
+                        ))}
+                    </div>
+                )}
+
+                <DropZone onFiles={onFiles} />
+
+                {state.images.length > 0 && (
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
+                        {state.images.length} image{state.images.length > 1 ? 's' : ''} loaded. First image is the hero. Hit Shuffle to rearrange.
+                    </p>
+                )}
+            </div>
+
+            <hr className="divider" />
+
+            {/* ── CONTENT ── */}
             <div>
                 <div className="section-label">Content</div>
                 <div className="field-group">
                     <label>Main Title</label>
                     <textarea
                         id="headline"
-                        rows={4}
+                        rows={3}
                         value={state.headline}
                         onChange={e => onFieldChange('headline', e.target.value)}
+                        onFocus={() => { if (state.headline === INITIAL_STATE.headline) onFieldChange('headline', ''); }}
                         placeholder="*MANCHESTER CITY* IN DANGER OF RELEGATION FROM THE EPL"
                     />
-                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: -2, marginBottom: 6 }}>
-                        Tip: Wrap words in *asterisks* to highlight them in color.
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>
+                        Wrap words in *asterisks* to highlight them in the accent color.
                     </p>
+
                     <label>Subtext (optional)</label>
                     <input
                         type="text"
                         id="subtext"
                         value={state.subtext}
                         onChange={e => onFieldChange('subtext', e.target.value)}
+                        onFocus={() => { if (state.subtext === INITIAL_STATE.subtext) onFieldChange('subtext', ''); }}
                         placeholder="Club sits 15th after 8 consecutive losses"
                     />
-                    <label>Brand Name Watermark</label>
+
+                    <label>Brand Name</label>
                     <input
                         type="text"
                         id="brand-name"
                         value={state.brandName}
                         onChange={e => onFieldChange('brandName', e.target.value)}
+                        onFocus={() => { if (state.brandName === INITIAL_STATE.brandName) onFieldChange('brandName', ''); }}
                         placeholder="FAROLS"
                     />
-                </div>
-            </div>
 
-            <hr className="divider" />
-
-            {/* IMAGES SECTION */}
-            <div>
-                <div className="section-label">Images</div>
-                <div className="field-group">
-                    <label>Main Image</label>
-                    <UploadZone
-                        id="bg-zone"
-                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>}
-                        label="Drop or click to upload"
-                        image={state.bgImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'bg')}
-                    />
-                    {state.bgImage && (
-                        <ImageTransformControls
-                            label="Main Image Tracking"
-                            transform={state.bgTransform}
-                            onChange={t => onFieldChange('bgTransform', t)}
-                        />
-                    )}
-
-                    <label style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        Thumbnail / Context Image
-                        {state.thumbImage && (
-                            <button
-                                onClick={() => onFieldChange('thumbImage', null)}
-                                style={{ background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.3)', color: '#ff8888', padding: '4px 8px', fontSize: 10, cursor: 'pointer', borderRadius: 4 }}
-                            >
-                                ✕ Remove
-                            </button>
-                        )}
-                    </label>
-                    <UploadZone
-                        id="thumb-zone"
-                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>}
-                        label="Drop or click to upload"
-                        image={state.thumbImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'thumb')}
-                    />
-                    {state.thumbImage && (
-                        <ImageTransformControls
-                            label="Thumbnail Tracking"
-                            transform={state.thumbTransform}
-                            onChange={t => onFieldChange('thumbTransform', t)}
-                        />
-                    )}
-
-                    <label style={{ marginTop: 8 }}>Logo File (Optional)</label>
-                    <UploadZone
-                        id="logo-zone"
-                        icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" x2="8" y1="8" y2="16" /></svg>}
-                        label="Upload PNG with transparency"
-                        image={state.logoImage}
-                        onChange={e => onImageUpload(e.target.files[0], 'logo')}
+                    <label>Badge Label</label>
+                    <input
+                        type="text"
+                        id="custom-badge"
+                        value={state.customBadge || ''}
+                        onChange={e => onFieldChange('customBadge', e.target.value)}
+                        onFocus={() => { if (state.customBadge === INITIAL_STATE.customBadge) onFieldChange('customBadge', ''); }}
+                        placeholder="NEWS"
                     />
                 </div>
             </div>
 
             <hr className="divider" />
 
-            {/* DESIGN SECTION */}
+            {/* ── DESIGN ── */}
             <div>
                 <div className="section-label">Design</div>
 
-                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label style={{ margin: 0 }}>Dark Filters (Overlay/Gradient)</label>
-                        <button
-                            onClick={() => onFieldChange('showFilters', state.showFilters === false)}
-                            style={{
-                                background: state.showFilters !== false ? 'rgba(255,50,50,0.15)' : 'rgba(50,255,50,0.15)',
-                                border: `1px solid ${state.showFilters !== false ? 'rgba(255,50,50,0.3)' : 'rgba(50,255,50,0.3)'}`,
-                                color: state.showFilters !== false ? '#ff8888' : '#88ff88',
-                                padding: '4px 8px', fontSize: 10, cursor: 'pointer', borderRadius: 4
-                            }}
-                        >
-                            {state.showFilters !== false ? '✕ Remove Filters' : '➕ Add Filters'}
-                        </button>
-                    </div>
-                </div>
-
-                <label>Format Options</label>
-                <div className="style-grid">
+                <label>Format</label>
+                <div className="style-grid" style={{ marginBottom: 16 }}>
                     {[
                         { id: 'square', label: 'Square', sub: '1080 × 1080' },
                         { id: 'story', label: 'Story', sub: '1080 × 1920' },
@@ -196,8 +177,8 @@ export default function Sidebar({
                     ))}
                 </div>
 
-                <label style={{ marginTop: 8 }}>Template / Theme</label>
-                <div className="style-grid" style={{ marginBottom: 4 }}>
+                <label>Theme</label>
+                <div className="style-grid" style={{ marginBottom: 16 }}>
                     {STYLE_OPTIONS.map(s => (
                         <div
                             key={s.id}
@@ -210,7 +191,7 @@ export default function Sidebar({
                     ))}
                 </div>
 
-                <label style={{ marginTop: 8 }}>Accent Override</label>
+                <label>Accent Color</label>
                 <div className="color-row">
                     {COLOR_SWATCHES.map(color => (
                         <div
@@ -222,19 +203,20 @@ export default function Sidebar({
                     ))}
                 </div>
             </div>
+
             <hr className="divider" />
 
-            {/* STATUS */}
+            {/* ── STATUS ── */}
             <div className="status-bar" id="status-bar">
                 <div className={`status-dot${status.type ? ` ${status.type}` : ''}`} />
-                <span>{status.msg}</span>
+                <span>{status.msg || (state.currentLayoutLabel ? `Layout: ${state.currentLayoutLabel}` : 'Upload images and hit Shuffle')}</span>
             </div>
 
-            {/* RENDER */}
-            <button className="btn btn-primary" onClick={onRender} disabled={loading}>
-                ⚡ Render Poster
+            {/* ── DOWNLOAD ── */}
+            <button className="btn btn-secondary" onClick={onDownload}>
+                ⬇ Download PNG
             </button>
 
-        </aside >
+        </aside>
     );
 }

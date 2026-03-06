@@ -1,12 +1,18 @@
 // ============================================================
-// POSTER RENDERING — Pure canvas drawing logic
+// POSTER RENDERER — Layout-driven canvas drawing engine.
+// Reads a layout descriptor produced by layoutEngine.js.
+// Zero React imports. Pure canvas 2D.
 // ============================================================
 
+import { generateLayout } from '../engine/layoutEngine.js';
+
+// ---- THEME DEFINITIONS ---- //
+
 export const STYLES = {
-    'dark-blue': { bg: '#0a1628', overlay: 'rgba(5,15,35,0.72)', stripe: '#00d4ff', textMain: '#ffffff', textAccent: '#00d4ff' },
-    'black-red': { bg: '#0d0000', overlay: 'rgba(10,0,0,0.75)', stripe: '#ff3c5f', textMain: '#ffffff', textAccent: '#ff3c5f' },
-    'white-punch': { bg: '#f0f0f0', overlay: 'rgba(240,240,240,0.55)', stripe: '#111', textMain: '#111111', textAccent: '#111111' },
-    'gold-black': { bg: '#0a0900', overlay: 'rgba(8,7,0,0.78)', stripe: '#ffd600', textMain: '#ffffff', textAccent: '#ffd600' },
+    'dark-blue': { bg: '#0a1628', overlay: 'rgba(5,15,35,0.72)', stripe: '#00d4ff', textMain: '#ffffff', textAccent: '#00d4ff', solidBg: '#0a1628' },
+    'black-red': { bg: '#0d0000', overlay: 'rgba(10,0,0,0.75)', stripe: '#ff3c5f', textMain: '#ffffff', textAccent: '#ff3c5f', solidBg: '#0d0000' },
+    'white-punch': { bg: '#f0f0f0', overlay: 'rgba(240,240,240,0.55)', stripe: '#111', textMain: '#111111', textAccent: '#111111', solidBg: '#f0eeea' },
+    'gold-black': { bg: '#0a0900', overlay: 'rgba(8,7,0,0.78)', stripe: '#ffd600', textMain: '#ffffff', textAccent: '#ffd600', solidBg: '#0a0900' },
 };
 
 export const COLOR_SWATCHES = [
@@ -15,32 +21,265 @@ export const COLOR_SWATCHES = [
 ];
 
 export const STYLE_OPTIONS = [
-    { id: 'dark-blue', label: 'Dark Blue', sub: 'Like your sample', color: '#00d4ff' },
+    { id: 'dark-blue', label: 'Dark Blue', sub: 'Cyan energy', color: '#00d4ff' },
     { id: 'black-red', label: 'Black Red', sub: 'Breaking news', color: '#ff3c5f' },
-    { id: 'white-punch', label: 'White Punch', sub: 'Clean editorial', color: '#f0f0f0' },
+    { id: 'white-punch', label: 'White Punch', sub: 'Clean editorial', color: '#222222' },
     { id: 'gold-black', label: 'Gold Black', sub: 'Premium feel', color: '#ffd600' },
 ];
+
+// ---- UTILITY: draw cropped image into a rect ---- //
+
+function drawImageCropped(ctx, img, x, y, w, h, anchorX = 0.5, anchorY = 0.35, extraScale = 1) {
+    if (!img) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+
+    const ir = img.naturalWidth / img.naturalHeight;
+    const cr = w / h;
+
+    let scale;
+    if (ir > cr) scale = h / img.naturalHeight;
+    else scale = w / img.naturalWidth;
+    scale *= extraScale;
+
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    const dx = x + (w - dw) * anchorX;
+    const dy = y + (h - dh) * anchorY;
+
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
+}
+
+// ---- UTILITY: draw circular clipped image ---- //
+
+function drawCircleImage(ctx, img, cx, cy, r, accentColor) {
+    if (!img) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    const s = (r * 2) / Math.min(img.naturalWidth, img.naturalHeight);
+    const dw = img.naturalWidth * s;
+    const dh = img.naturalHeight * s;
+    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+    ctx.restore();
+
+    // Accent ring
+    ctx.save();
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+}
+
+// ---- UTILITY: wrap & draw text with word highlight ---- //
 
 function wrapText(ctx, text, maxWidth) {
     const words = text.split(' ');
     const lines = [];
     let current = '';
-    words.forEach(word => {
-        const test = current ? current + ' ' + word : word;
+    for (const word of words) {
+        const clean = word.replace(/\*/g, '');
+        const test = current ? current + ' ' + clean : clean;
         if (ctx.measureText(test).width > maxWidth && current) {
             lines.push(current);
-            current = word;
+            current = clean;
         } else {
             current = test;
         }
-    });
+    }
     if (current) lines.push(current);
     return lines;
 }
 
+function drawHeadlineText(ctx, raw, x, y, w, h, colors, align = 'left') {
+    if (!raw) return;
+    const upper = raw.toUpperCase();
+    const words = upper.split(' ');
+
+    // Determine font size that fits both width and height
+    let fontSize = Math.min(Math.round(w / 8), 110);
+    ctx.font = `900 ${fontSize}px 'Barlow Condensed', sans-serif`;
+    let lines = wrapText(ctx, upper, w);
+    let textHeight = lines.length * fontSize * 1.05;
+
+    while ((lines.length > 5 || textHeight > h) && fontSize > 16) {
+        fontSize -= 4;
+        ctx.font = `900 ${fontSize}px 'Barlow Condensed', sans-serif`;
+        lines = wrapText(ctx, upper, w);
+        textHeight = lines.length * fontSize * 1.05;
+    }
+
+    let currentY = y + fontSize;
+
+    // Rebuild lines with original markers for coloring
+    const rawUpper = raw.toUpperCase();
+    const rawWords = rawUpper.split(' ');
+    let wordIdx = 0;
+
+    for (const line of lines) {
+        if (currentY > y + h + fontSize) break;
+
+        const lineWords = line.split(' ');
+        const lineText = lineWords.join(' ');
+        const lineW = ctx.measureText(lineText).width;
+
+        let drawX;
+        if (align === 'center') drawX = x + (w - lineW) / 2;
+        else if (align === 'right') drawX = x + w - lineW;
+        else drawX = x;
+
+        for (const word of lineWords) {
+            const srcWord = rawWords[wordIdx] || '';
+            const isHighlighted = srcWord.includes('*');
+            const cleanWord = word.replace(/\*/g, '');
+            ctx.fillStyle = isHighlighted ? colors.accent : colors.main;
+            ctx.fillText(cleanWord, drawX, currentY);
+            drawX += ctx.measureText(cleanWord + ' ').width;
+            wordIdx++;
+        }
+
+        currentY += fontSize * 1.05;
+    }
+}
+
+function drawSubtextText(ctx, text, x, y, w, h, colors, align = 'left') {
+    if (!text) return;
+    let fontSize = Math.min(Math.round(w / 28), 38);
+    ctx.font = `500 italic ${fontSize}px 'Barlow', sans-serif`;
+    ctx.fillStyle = 'rgba(240,240,240,0.72)';
+
+    let lines = wrapText(ctx, text, w);
+    let textHeight = lines.length * fontSize * 1.35;
+
+    while ((lines.length > 3 || textHeight > h) && fontSize > 12) {
+        fontSize -= 2;
+        ctx.font = `500 italic ${fontSize}px 'Barlow', sans-serif`;
+        lines = wrapText(ctx, text, w);
+        textHeight = lines.length * fontSize * 1.35;
+    }
+
+    let currentY = y + fontSize;
+    for (const line of lines) {
+        if (currentY > y + h + fontSize * 0.5) break;
+        const lw = ctx.measureText(line).width;
+        let drawX;
+        if (align === 'center') drawX = x + (w - lw) / 2;
+        else if (align === 'right') drawX = x + w - lw;
+        else drawX = x;
+        ctx.fillText(line, drawX, currentY);
+        currentY += fontSize * 1.35;
+    }
+}
+
+function drawBadge(ctx, x, y, label, accentColor) {
+    const fontSize = 24;
+    ctx.font = `700 ${fontSize}px 'Barlow Condensed', sans-serif`;
+    const tw = ctx.measureText(label).width;
+    const padX = 14, padY = 8;
+    const bW = tw + padX * 2, bH = fontSize + padY * 2;
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(x, y - bH, bW, bH);
+    ctx.fillStyle = '#000';
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, x + padX, y - bH + padY + 2);
+    ctx.textBaseline = 'alphabetic';
+}
+
+function drawBrandWatermark(ctx, x, y, brandName, accentColor) {
+    if (!brandName) return;
+    const upper = brandName.toUpperCase();
+    const fontSize = 26;
+    ctx.font = `700 ${fontSize}px 'Barlow Condensed', sans-serif`;
+    const tw = ctx.measureText(upper).width;
+    const padX = 20, padY = 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x - tw - padX * 2, y - fontSize - padY, tw + padX * 2, fontSize + padY * 2);
+    ctx.fillStyle = accentColor;
+    ctx.textAlign = 'right';
+    ctx.fillText(upper, x - padX, y + padY * 0.4);
+    ctx.textAlign = 'left';
+}
+
+// ---- DRAW OVERLAY ---- //
+
+function drawOverlay(ctx, zone, theme, W, H) {
+    switch (zone.subtype) {
+        case 'dark-overlay':
+            ctx.fillStyle = theme.overlay;
+            ctx.fillRect(0, 0, W, H);
+            break;
+        case 'solid-dark':
+            ctx.fillStyle = theme.solidBg || '#0a0a0a';
+            ctx.fillRect(0, 0, W, H);
+            break;
+        case 'vignette': {
+            const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.8);
+            v.addColorStop(0, 'rgba(0,0,0,0)');
+            v.addColorStop(1, 'rgba(0,0,0,0.6)');
+            ctx.fillStyle = v;
+            ctx.fillRect(0, 0, W, H);
+            break;
+        }
+        case 'bottom-gradient': {
+            const startY = zone.startY ?? H * 0.55;
+            const height = zone.height ?? H * 0.45;
+            const bg = ctx.createLinearGradient(0, startY, 0, startY + height);
+            bg.addColorStop(0, 'rgba(0,0,0,0)');
+            bg.addColorStop(0.35, 'rgba(0,0,0,0.82)');
+            bg.addColorStop(1, 'rgba(0,0,0,0.97)');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, startY, W, height + 10);
+            break;
+        }
+        case 'side-fade': {
+            const splitX = zone.splitX || W * 0.5;
+            const fadeW = Math.round(W * 0.12);
+            const sf = ctx.createLinearGradient(splitX - fadeW, 0, splitX + 20, 0);
+            sf.addColorStop(0, 'rgba(0,0,0,0)');
+            sf.addColorStop(1, theme.solidBg || 'rgba(0,0,0,0.97)');
+            ctx.fillStyle = sf;
+            ctx.fillRect(splitX - fadeW, 0, fadeW + 20, H);
+            break;
+        }
+    }
+}
+
+// ---- DRAW SOLID BG ZONE ---- //
+
+function drawSolidBg(ctx, zone, theme) {
+    ctx.fillStyle = theme.solidBg || theme.bg || '#0a0a0a';
+    ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+}
+
+// ---- MAIN RENDER FUNCTION ---- //
+
+/**
+ * Render a poster onto a canvas element.
+ *
+ * @param {{ canvas: HTMLCanvasElement, state: Object }} param0
+ */
 export function renderPoster({ canvas, state }) {
     const ctx = canvas.getContext('2d');
-    const { bgImage, bgTransform, thumbImage, thumbTransform, logoImage, style, accentColor, format, headline, subtext, brandName } = state;
+
+    const {
+        images = [],
+        headline = '',
+        subtext = '',
+        brandName = '',
+        style = 'dark-blue',
+        accentColor,
+        format = 'square',
+        layoutSeed = 0,
+        layoutHistory = [],
+        customBadge = 'NEWS',
+    } = state;
 
     const isStory = format === 'story';
     const W = 1080;
@@ -48,164 +287,92 @@ export function renderPoster({ canvas, state }) {
     canvas.width = W;
     canvas.height = H;
 
-    const theme = { ...STYLES[style], stripe: accentColor };
+    const theme = { ...STYLES[style] };
+    const accent = accentColor || theme.stripe;
+    const colors = { main: theme.textMain, accent };
 
-    // ---- BG ----
-    if (bgImage) {
-        const img = bgImage;
-        const ir = img.width / img.height;
-        const cr = W / H;
-
-        let baseScale = 1;
-        if (ir > cr) { baseScale = H / img.height; }
-        else { baseScale = W / img.width; }
-
-        const scale = baseScale * (bgTransform?.scale || 1);
-        const dw = img.width * scale;
-        const dh = img.height * scale;
-
-        const px = bgTransform?.x ?? 0.5;
-        const py = bgTransform?.y ?? 0.5;
-
-        const dx = (W - dw) * px;
-        const dy = (H - dh) * py;
-
-        ctx.drawImage(img, dx, dy, dw, dh);
-    } else {
-        const grad = ctx.createLinearGradient(0, 0, W, H);
-        grad.addColorStop(0, theme.bg);
-        grad.addColorStop(1, '#000000');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, W, H);
-    }
-
-    // ---- DARK FILTERS (TOGGLEABLE) ----
-    if (state.showFilters !== false) {
-        // ---- DARK OVERLAY ----
-        ctx.fillStyle = theme.overlay;
-        ctx.fillRect(0, 0, W, H);
-
-        // ---- VIGNETTE ----
-        const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.8);
-        vignette.addColorStop(0, 'rgba(0,0,0,0)');
-        vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
-        ctx.fillStyle = vignette;
-        ctx.fillRect(0, 0, W, H);
-
-        // ---- BOTTOM GRADIENT ----
-        const bottomH = isStory ? 700 : 460;
-        const bottomGrad = ctx.createLinearGradient(0, H - bottomH, 0, H);
-        bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
-        bottomGrad.addColorStop(0.4, 'rgba(0,0,0,0.85)');
-        bottomGrad.addColorStop(1, 'rgba(0,0,0,0.97)');
-        ctx.fillStyle = bottomGrad;
-        ctx.fillRect(0, H - bottomH, W, bottomH);
-    }
-
-    // ---- THUMBNAIL (if provided) ----
-    if (thumbImage) {
-        const thumbSize = isStory ? 320 : 260;
-        const tx = W - thumbSize - 48;
-        const ty = isStory ? 140 : 60;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(tx + thumbSize / 2, ty + thumbSize / 2, thumbSize / 2, 0, Math.PI * 2);
-        ctx.clip();
-
-        const ti = thumbImage;
-        const ir = ti.width / ti.height;
-        let baseScale = 1;
-        if (ir > 1) { baseScale = thumbSize / ti.height; }
-        else { baseScale = thumbSize / ti.width; }
-
-        const scale = baseScale * (thumbTransform?.scale || 1);
-        const dw = ti.width * scale;
-        const dh = ti.height * scale;
-
-        const px = thumbTransform?.x ?? 0.5;
-        const py = thumbTransform?.y ?? 0.5;
-
-        const dx = tx + (thumbSize - dw) * px;
-        const dy = ty + (thumbSize - dh) * py;
-
-        ctx.drawImage(ti, dx, dy, dw, dh);
-        ctx.restore();
-
-        ctx.strokeStyle = theme.stripe;
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.arc(tx + thumbSize / 2, ty + thumbSize / 2, thumbSize / 2 + 2, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // ---- ACCENT STRIPE ----
-    const stripeY = isStory ? H - 420 : H - 320;
-    ctx.fillStyle = theme.stripe;
-    ctx.fillRect(0, stripeY, W, 4);
-
-    // ---- BRAND NAME ----
-    const brandFont = isStory ? 32 : 26;
-    ctx.font = `700 ${brandFont}px 'Barlow Condensed', sans-serif`;
-    ctx.fillStyle = theme.stripe;
-
-    const brandMeasure = ctx.measureText(brandName).width;
-    const brandW = brandMeasure + 40;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(W - brandW - 32, stripeY - brandFont - 10, brandW, brandFont + 16);
-    ctx.fillStyle = theme.stripe;
-    ctx.textAlign = 'right';
-    ctx.fillText(brandName, W - 44, stripeY - 12);
-    ctx.textAlign = 'left';
-
-    // ---- LOGO ----
-    if (logoImage) {
-        const lH = isStory ? 60 : 48;
-        const lW = logoImage.width * (lH / logoImage.height);
-        ctx.globalAlpha = 0.92;
-        ctx.drawImage(logoImage, W - lW - 32, H - lH - 32, lW, lH);
-        ctx.globalAlpha = 1;
-    }
-
-    // ---- HEADLINE ----
-    const pad = 48;
-    const textY = stripeY + 28;
-    const maxWText = W - pad * 2;
-
-    const headlineUpper = headline.toUpperCase();
-    const fontSize = isStory ? 108 : 88;
-    ctx.font = `900 ${fontSize}px 'Barlow Condensed', sans-serif`;
-
-    const lines = wrapText(ctx, headlineUpper, maxWText);
-
-    let currentY = textY + fontSize;
-    lines.forEach((line) => {
-        const words = line.split(' ');
-        const lineWidth = ctx.measureText(line.replace(/\*/g, '')).width; // measure without asterisks
-        let x = pad + (maxWText - lineWidth) / 2; // Center alignment
-
-        words.forEach((word) => {
-            const isKey = word.includes('*'); // manual highlight trigger
-            const cleanWord = word.replace(/\*/g, ''); // strip for drawing
-
-            ctx.fillStyle = isKey ? theme.stripe : theme.textMain;
-            ctx.fillText(cleanWord + ' ', x, currentY);
-            x += ctx.measureText(cleanWord + ' ').width; // Add space incrementally
-        });
-        currentY += fontSize * 1.05;
+    // Generate layout — extract bare HTMLImageElements from {img, src, id} wrappers
+    const imgEls = images.map(i => (i && i.img ? i.img : i)).filter(Boolean);
+    const layout = generateLayout(imgEls, { headline, subtext, brandName }, {
+        seed: layoutSeed,
+        format,
+        history: layoutHistory,
     });
 
-    // ---- SUBTEXT ----
-    if (subtext) {
-        const subSize = isStory ? 38 : 30;
-        ctx.font = `500 ${subSize}px 'Barlow', sans-serif`;
-        ctx.fillStyle = 'rgba(240,240,240,0.72)';
-        const subLines = wrapText(ctx, subtext, maxWText);
-        subLines.forEach((line, i) => {
-            const lineWidth = ctx.measureText(line).width;
-            const x = pad + (maxWText - lineWidth) / 2; // Center alignment
-            ctx.fillText(line, x, currentY + 16 + (subSize * 1.3 * i));
-        });
+    // ---- PHASE 1: Base background ---- //
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Sort zones: solid-bg first, then images, then overlays, then text
+    const order = { 'solid-bg': 0, image: 1, 'image-circle': 1, overlay: 2, stripe: 3, badge: 4, brand: 4, headline: 5, subtext: 5 };
+    const sorted = [...layout.zones].sort((a, b) => (order[a.type] ?? 3) - (order[b.type] ?? 3));
+
+    // ---- Draw each zone ---- //
+    for (const zone of sorted) {
+        ctx.save();
+        ctx.globalAlpha = zone.opacity ?? 1;
+
+        switch (zone.type) {
+            case 'solid-bg':
+                drawSolidBg(ctx, zone, theme);
+                break;
+
+            case 'image':
+                if (zone.img) {
+                    if (zone.outline) {
+                        // Draw accent outline first
+                        ctx.fillStyle = accent;
+                        ctx.fillRect(zone.x - 3, zone.y - 3, zone.w + 6, zone.h + 6);
+                    }
+                    drawImageCropped(ctx, zone.img, zone.x, zone.y, zone.w, zone.h, zone.anchorX, zone.anchorY);
+                } else {
+                    // No image placeholder — draw gradient
+                    const grad = ctx.createLinearGradient(zone.x, zone.y, zone.x + zone.w, zone.y + zone.h);
+                    grad.addColorStop(0, theme.bg);
+                    grad.addColorStop(1, '#000000');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+                }
+                break;
+
+            case 'image-circle':
+                drawCircleImage(ctx, zone.img, zone.cx, zone.cy, zone.r, accent);
+                break;
+
+            case 'overlay':
+                ctx.globalAlpha = 1;
+                drawOverlay(ctx, zone, theme, W, H);
+                break;
+
+            case 'stripe':
+                ctx.fillStyle = accent;
+                ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+                break;
+
+            case 'badge':
+                ctx.globalAlpha = 1;
+                drawBadge(ctx, zone.x, zone.y, customBadge || zone.label || 'NEWS', accent);
+                break;
+
+            case 'brand':
+                ctx.globalAlpha = 1;
+                drawBrandWatermark(ctx, zone.x, zone.y, brandName, accent);
+                break;
+
+            case 'headline':
+                ctx.globalAlpha = 1;
+                drawHeadlineText(ctx, headline, zone.x, zone.y, zone.w, zone.h, colors, zone.align);
+                break;
+
+            case 'subtext':
+                ctx.globalAlpha = 1;
+                drawSubtextText(ctx, subtext, zone.x, zone.y, zone.w, zone.h, colors, zone.align);
+                break;
+        }
+
+        ctx.restore();
     }
+
+    // Return layout info for display
+    return { layout };
 }

@@ -1,90 +1,45 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { CanvasAreaWithRef } from './components/CanvasArea';
-import LoadingOverlay from './components/LoadingOverlay';
 import { usePosterState } from './hooks/usePosterState';
-import { renderPoster } from './lib/posterRenderer';
 import './index.css';
 
 export default function App() {
-  const { state, update, loadImageFromFile } = usePosterState();
-  const [status, setStatus] = useState({ msg: 'Ready — fill in details and render', type: '' });
-  const [loading, setLoading] = useState(false);
-  const [loader, setLoader] = useState({ title: '', sub: '' });
+  const {
+    state, stateRef,
+    set, update,
+    setRenderFn,
+    addMultipleImages, removeImage,
+    shuffle, setLayoutLabel,
+  } = usePosterState();
 
   const canvasRef = useRef(null);
+  const [status, setStatus] = useState({ msg: 'Drop images and hit Shuffle to begin', type: '' });
+  const setStatusMsg = useCallback((msg, type = '') => setStatus({ msg, type }), []);
 
-  const setStatusMsg = useCallback((msg, type = '') => {
-    setStatus({ msg, type });
-  }, []);
+  // CanvasArea registers its stable render fn here once on mount
+  const handleRenderReady = useCallback((renderFn) => {
+    setRenderFn(renderFn);
+    requestAnimationFrame(() => renderFn(stateRef.current));
+  }, [setRenderFn, stateRef]);
 
-  const showLoader = (title, sub) => {
-    setLoader({ title, sub });
-    setLoading(true);
-  };
+  // ── Text fields: update globally and trigger canvas repaint ──
+  const handleFieldChange = useCallback((field, value) => update({ [field]: value }), [update]);
 
-  const hideLoader = () => setLoading(false);
+  // ── These trigger canvas repaints immediately ──
+  const handleStyleChange = useCallback((s) => update({ style: s }), [update]);
+  const handleAccentChange = useCallback((c) => update({ accentColor: c }), [update]);
+  const handleFormatChange = useCallback((f) => update({ format: f }), [update]);
+  const handleFiles = useCallback((files) => addMultipleImages(files), [addMultipleImages]);
+  const handleRemoveImage = useCallback((id) => removeImage(id), [removeImage]);
 
-  // Initial render on mount
-  useEffect(() => {
-    // small delay so DOM is ready
-    const t = setTimeout(() => {
-      if (canvasRef.current) {
-        canvasRef.current.render();
-        update({ rendered: true });
-      }
-    }, 100);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleShuffle = useCallback(() => {
+    setStatusMsg('Shuffling…', 'active');
+    shuffle();
+  }, [shuffle, setStatusMsg]);
 
-  // Handle render
-  const handleRender = useCallback(() => {
-    if (!canvasRef.current) return;
-    setStatusMsg('Rendering...', 'active');
-
-    // Small timeout to let state settle
-    setTimeout(() => {
-      const canvas = document.getElementById('poster-canvas');
-      if (!canvas) return;
-      renderPoster({ canvas, state });
-
-      // Scale for display
-      const W = canvas.width;
-      const H = canvas.height;
-      const wrapper = canvas.parentElement;
-      const maxH = window.innerHeight * 0.65;
-      const maxW = (wrapper?.parentElement?.clientWidth ?? 600) - 64;
-      const scale = Math.min(maxW / W, maxH / H, 1);
-      canvas.style.width = `${W * scale}px`;
-      canvas.style.height = `${H * scale}px`;
-
-      update({ rendered: true });
-      setStatusMsg('Poster rendered — ready to download', 'success');
-    }, 50);
-  }, [state, update, setStatusMsg]);
-
-  const handleImageUpload = (file, type) => {
-    loadImageFromFile(file, type);
-    setStatusMsg('Image loaded — render when ready', '');
-  };
-
-  const handleFieldChange = (field, value) => {
-    update({ [field]: value });
-  };
-
-  const handleStyleChange = (style) => {
-    update({ style });
-  };
-
-  const handleAccentChange = (color) => {
-    update({ accentColor: color });
-  };
-
-  const handleFormatChange = (format) => {
-    update({ format });
-  };
+  const handleDownload = useCallback(() => canvasRef.current?.download(), []);
 
   return (
     <>
@@ -93,22 +48,23 @@ export default function App() {
         <Sidebar
           state={state}
           status={status}
-          loading={loading}
-          onImageUpload={handleImageUpload}
+          onFiles={handleFiles}
+          onRemoveImage={handleRemoveImage}
           onFieldChange={handleFieldChange}
           onStyleChange={handleStyleChange}
           onAccentChange={handleAccentChange}
           onFormatChange={handleFormatChange}
-          onRender={handleRender}
+          onShuffle={handleShuffle}
+          onDownload={handleDownload}
         />
         <CanvasAreaWithRef
           ref={canvasRef}
           state={state}
-          onFormatSwitch={handleFormatChange}
           onStatusUpdate={setStatusMsg}
+          onLayoutLabel={setLayoutLabel}
+          onRenderReady={handleRenderReady}
         />
       </div>
-      <LoadingOverlay show={loading} title={loader.title} sub={loader.sub} />
     </>
   );
 }
