@@ -32,6 +32,24 @@ function getPanValue(value) {
     return clamp((value ?? 0) / 100, -1, 1);
 }
 
+function getCropBounds(frameStart, frameSize, drawnSize) {
+    if (drawnSize <= frameSize) {
+        const centered = frameStart + (frameSize - drawnSize) / 2;
+        return { min: centered, max: centered };
+    }
+
+    return {
+        min: frameStart + frameSize - drawnSize,
+        max: frameStart,
+    };
+}
+
+function applyPersistentPan(basePosition, bounds, pan) {
+    const travel = (bounds.max - bounds.min) / 2;
+    const shifted = basePosition - pan * travel;
+    return clamp(shifted, bounds.min, bounds.max);
+}
+
 function chunkWord(ctx, word, maxWidth) {
     const pieces = [];
     let current = '';
@@ -144,8 +162,12 @@ function drawImageCropped(ctx, image, x, y, w, h, anchorX = 0.5, anchorY = 0.35,
 
     const dw = img.naturalWidth * scale;
     const dh = img.naturalHeight * scale;
-    const dx = x + (w - dw) * clamp(anchorX + getPanValue(imageItem.offsetX) * 0.4, 0, 1);
-    const dy = y + (h - dh) * clamp(anchorY + getPanValue(imageItem.offsetY) * 0.4, 0, 1);
+    const boundsX = getCropBounds(x, w, dw);
+    const boundsY = getCropBounds(y, h, dh);
+    const baseDx = x + (w - dw) * clamp(anchorX, 0, 1);
+    const baseDy = y + (h - dh) * clamp(anchorY, 0, 1);
+    const dx = applyPersistentPan(baseDx, boundsX, getPanValue(imageItem.offsetX));
+    const dy = applyPersistentPan(baseDy, boundsY, getPanValue(imageItem.offsetY));
 
     ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
@@ -166,9 +188,15 @@ function drawCircleImage(ctx, image, cx, cy, r, accentColor) {
     const s = ((r * 2) / Math.min(img.naturalWidth, img.naturalHeight)) * zoom;
     const dw = img.naturalWidth * s;
     const dh = img.naturalHeight * s;
-    const offsetX = getPanValue(imageItem.offsetX) * r * 0.75;
-    const offsetY = getPanValue(imageItem.offsetY) * r * 0.75;
-    ctx.drawImage(img, cx - dw / 2 - offsetX, cy - dh / 2 - offsetY, dw, dh);
+    const frameX = cx - r;
+    const frameY = cy - r;
+    const boundsX = getCropBounds(frameX, r * 2, dw);
+    const boundsY = getCropBounds(frameY, r * 2, dh);
+    const baseDx = cx - dw / 2;
+    const baseDy = cy - dh / 2;
+    const dx = applyPersistentPan(baseDx, boundsX, getPanValue(imageItem.offsetX));
+    const dy = applyPersistentPan(baseDy, boundsY, getPanValue(imageItem.offsetY));
+    ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
 
     ctx.save();
