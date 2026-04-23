@@ -36,18 +36,6 @@ function shuffle(arr, rng) {
     return a;
 }
 
-/**
- * Determine the "natural role" of an image based on aspect ratio.
- * Portrait/square images work best as heroes.
- */
-function imageRole(img) {
-    if (!img) return 'unknown';
-    const ar = img.naturalWidth / img.naturalHeight;
-    if (ar < 0.85) return 'portrait';
-    if (ar < 1.2) return 'square';
-    return 'landscape';
-}
-
 // ============================================================
 // LAYOUT DEFINITIONS
 // Each layout is a function: (images, W, H, rng, theme) => descriptor

@@ -1,12 +1,4 @@
-// ============================================================
-// POSTER RENDERER — Layout-driven canvas drawing engine.
-// Reads a layout descriptor produced by layoutEngine.js.
-// Zero React imports. Pure canvas 2D.
-// ============================================================
-
 import { generateLayout } from '../engine/layoutEngine.js';
-
-// ---- THEME DEFINITIONS ---- //
 
 export const STYLES = {
     'dark-blue': { bg: '#0a1628', overlay: 'rgba(5,15,35,0.72)', stripe: '#00d4ff', textMain: '#ffffff', textAccent: '#00d4ff', solidBg: '#0a1628' },
@@ -27,10 +19,115 @@ export const STYLE_OPTIONS = [
     { id: 'gold-black', label: 'Gold Black', sub: 'Premium feel', color: '#ffd600' },
 ];
 
-// ---- UTILITY: draw cropped image into a rect ---- //
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
 
-function drawImageCropped(ctx, img, x, y, w, h, anchorX = 0.5, anchorY = 0.35, extraScale = 1) {
+function resolveImageItem(image) {
+    if (!image) return null;
+    return image.img ? image : { img: image, zoom: 1, offsetX: 0, offsetY: 0 };
+}
+
+function getPanValue(value) {
+    return clamp((value ?? 0) / 100, -1, 1);
+}
+
+function chunkWord(ctx, word, maxWidth) {
+    const pieces = [];
+    let current = '';
+
+    for (const char of word) {
+        const test = current + char;
+        if (current && ctx.measureText(test).width > maxWidth) {
+            pieces.push(current);
+            current = char;
+        } else {
+            current = test;
+        }
+    }
+
+    if (current) {
+        pieces.push(current);
+    }
+
+    return pieces;
+}
+
+function wrapText(ctx, text, maxWidth) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = '';
+
+    for (const rawWord of words) {
+        const wordParts = ctx.measureText(rawWord.replace(/\*/g, '')).width > maxWidth
+            ? chunkWord(ctx, rawWord, maxWidth)
+            : [rawWord];
+
+        for (const word of wordParts) {
+            const clean = word.replace(/\*/g, '');
+            const test = current ? `${current} ${clean}` : clean;
+            if (current && ctx.measureText(test).width > maxWidth) {
+                lines.push(current);
+                current = clean;
+            } else {
+                current = test;
+            }
+        }
+    }
+
+    if (current) {
+        lines.push(current);
+    }
+
+    return lines.length > 0 ? lines : [''];
+}
+
+function fitTextBlock(ctx, text, options) {
+    const {
+        maxWidth,
+        maxHeight,
+        maxLines,
+        minFontSize,
+        maxFontSize,
+        fontFamily,
+        fontWeight,
+        fontStyle = 'normal',
+        lineHeightScale,
+    } = options;
+
+    let fontSize = maxFontSize;
+    let lines = [''];
+    let lineHeight = fontSize * lineHeightScale;
+
+    while (fontSize >= minFontSize) {
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+        lines = wrapText(ctx, text, maxWidth);
+        lineHeight = fontSize * lineHeightScale;
+        const totalHeight = lines.length * lineHeight;
+
+        if (lines.length <= maxLines && totalHeight <= maxHeight) {
+            break;
+        }
+
+        fontSize -= fontSize > 30 ? 4 : 2;
+    }
+
+    if (fontSize < minFontSize) {
+        fontSize = minFontSize;
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+        lines = wrapText(ctx, text, maxWidth);
+        lineHeight = fontSize * lineHeightScale;
+    }
+
+    return { fontSize, lines, lineHeight };
+}
+
+function drawImageCropped(ctx, image, x, y, w, h, anchorX = 0.5, anchorY = 0.35, extraScale = 1) {
+    const imageItem = resolveImageItem(image);
+    const img = imageItem?.img;
+
     if (!img) return;
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, w, h);
@@ -42,33 +139,38 @@ function drawImageCropped(ctx, img, x, y, w, h, anchorX = 0.5, anchorY = 0.35, e
     let scale;
     if (ir > cr) scale = h / img.naturalHeight;
     else scale = w / img.naturalWidth;
-    scale *= extraScale;
+
+    scale *= (imageItem.zoom ?? 1) * extraScale;
 
     const dw = img.naturalWidth * scale;
     const dh = img.naturalHeight * scale;
-    const dx = x + (w - dw) * anchorX;
-    const dy = y + (h - dh) * anchorY;
+    const dx = x + (w - dw) * clamp(anchorX + getPanValue(imageItem.offsetX) * 0.4, 0, 1);
+    const dy = y + (h - dh) * clamp(anchorY + getPanValue(imageItem.offsetY) * 0.4, 0, 1);
 
     ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
 }
 
-// ---- UTILITY: draw circular clipped image ---- //
+function drawCircleImage(ctx, image, cx, cy, r, accentColor) {
+    const imageItem = resolveImageItem(image);
+    const img = imageItem?.img;
 
-function drawCircleImage(ctx, img, cx, cy, r, accentColor) {
     if (!img) return;
+
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.clip();
 
-    const s = (r * 2) / Math.min(img.naturalWidth, img.naturalHeight);
+    const zoom = imageItem.zoom ?? 1;
+    const s = ((r * 2) / Math.min(img.naturalWidth, img.naturalHeight)) * zoom;
     const dw = img.naturalWidth * s;
     const dh = img.naturalHeight * s;
-    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+    const offsetX = getPanValue(imageItem.offsetX) * r * 0.75;
+    const offsetY = getPanValue(imageItem.offsetY) * r * 0.75;
+    ctx.drawImage(img, cx - dw / 2 - offsetX, cy - dh / 2 - offsetY, dw, dh);
     ctx.restore();
 
-    // Accent ring
     ctx.save();
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 5;
@@ -78,54 +180,30 @@ function drawCircleImage(ctx, img, cx, cy, r, accentColor) {
     ctx.restore();
 }
 
-// ---- UTILITY: wrap & draw text with word highlight ---- //
-
-function wrapText(ctx, text, maxWidth) {
-    const words = text.split(' ');
-    const lines = [];
-    let current = '';
-    for (const word of words) {
-        const clean = word.replace(/\*/g, '');
-        const test = current ? current + ' ' + clean : clean;
-        if (ctx.measureText(test).width > maxWidth && current) {
-            lines.push(current);
-            current = clean;
-        } else {
-            current = test;
-        }
-    }
-    if (current) lines.push(current);
-    return lines;
-}
-
 function drawHeadlineText(ctx, raw, x, y, w, h, colors, align = 'left') {
     if (!raw) return;
+
     const upper = raw.toUpperCase();
-    const words = upper.split(' ');
+    const textPressure = clamp(upper.replace(/\*/g, '').length / 70, 0, 1);
+    const maxFontSize = Math.min(Math.round(w / (7.8 + textPressure * 1.8)), Math.round(h / 1.45), 110);
+    const { fontSize, lines, lineHeight } = fitTextBlock(ctx, upper, {
+        maxWidth: w,
+        maxHeight: h,
+        maxLines: 7,
+        minFontSize: 12,
+        maxFontSize,
+        fontFamily: "'Barlow Condensed', sans-serif",
+        fontWeight: 900,
+        lineHeightScale: 0.98,
+    });
 
-    // Determine font size that fits both width and height
-    let fontSize = Math.min(Math.round(w / 8), 110);
-    ctx.font = `900 ${fontSize}px 'Barlow Condensed', sans-serif`;
-    let lines = wrapText(ctx, upper, w);
-    let textHeight = lines.length * fontSize * 1.05;
-
-    while ((lines.length > 5 || textHeight > h) && fontSize > 16) {
-        fontSize -= 4;
-        ctx.font = `900 ${fontSize}px 'Barlow Condensed', sans-serif`;
-        lines = wrapText(ctx, upper, w);
-        textHeight = lines.length * fontSize * 1.05;
-    }
-
-    let currentY = y + fontSize;
-
-    // Rebuild lines with original markers for coloring
-    const rawUpper = raw.toUpperCase();
-    const rawWords = rawUpper.split(' ');
+    ctx.font = `normal 900 ${fontSize}px 'Barlow Condensed', sans-serif`;
+    const totalHeight = lines.length * lineHeight;
+    let currentY = y + fontSize + Math.max(0, (h - totalHeight) * 0.05);
+    const rawWords = raw.toUpperCase().split(' ');
     let wordIdx = 0;
 
     for (const line of lines) {
-        if (currentY > y + h + fontSize) break;
-
         const lineWords = line.split(' ');
         const lineText = lineWords.join(' ');
         const lineW = ctx.measureText(lineText).width;
@@ -141,40 +219,42 @@ function drawHeadlineText(ctx, raw, x, y, w, h, colors, align = 'left') {
             const cleanWord = word.replace(/\*/g, '');
             ctx.fillStyle = isHighlighted ? colors.accent : colors.main;
             ctx.fillText(cleanWord, drawX, currentY);
-            drawX += ctx.measureText(cleanWord + ' ').width;
+            drawX += ctx.measureText(`${cleanWord} `).width;
             wordIdx++;
         }
 
-        currentY += fontSize * 1.05;
+        currentY += lineHeight;
     }
 }
 
 function drawSubtextText(ctx, text, x, y, w, h, colors, align = 'left') {
     if (!text) return;
-    let fontSize = Math.min(Math.round(w / 28), 38);
-    ctx.font = `500 italic ${fontSize}px 'Barlow', sans-serif`;
-    ctx.fillStyle = 'rgba(240,240,240,0.72)';
 
-    let lines = wrapText(ctx, text, w);
-    let textHeight = lines.length * fontSize * 1.35;
+    const { fontSize, lines, lineHeight } = fitTextBlock(ctx, text, {
+        maxWidth: w,
+        maxHeight: h,
+        maxLines: 4,
+        minFontSize: 10,
+        maxFontSize: Math.min(Math.round(w / 26), 38),
+        fontFamily: "'Barlow', sans-serif",
+        fontWeight: 500,
+        fontStyle: 'italic',
+        lineHeightScale: 1.25,
+    });
 
-    while ((lines.length > 3 || textHeight > h) && fontSize > 12) {
-        fontSize -= 2;
-        ctx.font = `500 italic ${fontSize}px 'Barlow', sans-serif`;
-        lines = wrapText(ctx, text, w);
-        textHeight = lines.length * fontSize * 1.35;
-    }
+    ctx.font = `italic 500 ${fontSize}px 'Barlow', sans-serif`;
+    ctx.fillStyle = colors.sub;
 
     let currentY = y + fontSize;
     for (const line of lines) {
-        if (currentY > y + h + fontSize * 0.5) break;
         const lw = ctx.measureText(line).width;
         let drawX;
         if (align === 'center') drawX = x + (w - lw) / 2;
         else if (align === 'right') drawX = x + w - lw;
         else drawX = x;
+
         ctx.fillText(line, drawX, currentY);
-        currentY += fontSize * 1.35;
+        currentY += lineHeight;
     }
 }
 
@@ -182,8 +262,10 @@ function drawBadge(ctx, x, y, label, accentColor) {
     const fontSize = 24;
     ctx.font = `700 ${fontSize}px 'Barlow Condensed', sans-serif`;
     const tw = ctx.measureText(label).width;
-    const padX = 14, padY = 8;
-    const bW = tw + padX * 2, bH = fontSize + padY * 2;
+    const padX = 14;
+    const padY = 8;
+    const bW = tw + padX * 2;
+    const bH = fontSize + padY * 2;
     ctx.fillStyle = accentColor;
     ctx.fillRect(x, y - bH, bW, bH);
     ctx.fillStyle = '#000';
@@ -198,7 +280,8 @@ function drawBrandWatermark(ctx, x, y, brandName, accentColor) {
     const fontSize = 26;
     ctx.font = `700 ${fontSize}px 'Barlow Condensed', sans-serif`;
     const tw = ctx.measureText(upper).width;
-    const padX = 20, padY = 8;
+    const padX = 20;
+    const padY = 8;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(x - tw - padX * 2, y - fontSize - padY, tw + padX * 2, fontSize + padY * 2);
     ctx.fillStyle = accentColor;
@@ -206,8 +289,6 @@ function drawBrandWatermark(ctx, x, y, brandName, accentColor) {
     ctx.fillText(upper, x - padX, y + padY * 0.4);
     ctx.textAlign = 'left';
 }
-
-// ---- DRAW OVERLAY ---- //
 
 function drawOverlay(ctx, zone, theme, W, H) {
     switch (zone.subtype) {
@@ -251,20 +332,11 @@ function drawOverlay(ctx, zone, theme, W, H) {
     }
 }
 
-// ---- DRAW SOLID BG ZONE ---- //
-
 function drawSolidBg(ctx, zone, theme) {
     ctx.fillStyle = theme.solidBg || theme.bg || '#0a0a0a';
     ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
 }
 
-// ---- MAIN RENDER FUNCTION ---- //
-
-/**
- * Render a poster onto a canvas element.
- *
- * @param {{ canvas: HTMLCanvasElement, state: Object }} param0
- */
 export function renderPoster({ canvas, state }) {
     const ctx = canvas.getContext('2d');
 
@@ -289,25 +361,24 @@ export function renderPoster({ canvas, state }) {
 
     const theme = { ...STYLES[style] };
     const accent = accentColor || theme.stripe;
-    const colors = { main: theme.textMain, accent };
+    const colors = {
+        main: theme.textMain,
+        accent,
+        sub: style === 'white-punch' ? 'rgba(17,17,17,0.72)' : 'rgba(240,240,240,0.78)',
+    };
 
-    // Generate layout — extract bare HTMLImageElements from {img, src, id} wrappers
-    const imgEls = images.map(i => (i && i.img ? i.img : i)).filter(Boolean);
-    const layout = generateLayout(imgEls, { headline, subtext, brandName }, {
+    const layout = generateLayout(images, { headline, subtext, brandName }, {
         seed: layoutSeed,
         format,
         history: layoutHistory,
     });
 
-    // ---- PHASE 1: Base background ---- //
     ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, W, H);
 
-    // Sort zones: solid-bg first, then images, then overlays, then text
     const order = { 'solid-bg': 0, image: 1, 'image-circle': 1, overlay: 2, stripe: 3, badge: 4, brand: 4, headline: 5, subtext: 5 };
     const sorted = [...layout.zones].sort((a, b) => (order[a.type] ?? 3) - (order[b.type] ?? 3));
 
-    // ---- Draw each zone ---- //
     for (const zone of sorted) {
         ctx.save();
         ctx.globalAlpha = zone.opacity ?? 1;
@@ -320,13 +391,11 @@ export function renderPoster({ canvas, state }) {
             case 'image':
                 if (zone.img) {
                     if (zone.outline) {
-                        // Draw accent outline first
                         ctx.fillStyle = accent;
                         ctx.fillRect(zone.x - 3, zone.y - 3, zone.w + 6, zone.h + 6);
                     }
                     drawImageCropped(ctx, zone.img, zone.x, zone.y, zone.w, zone.h, zone.anchorX, zone.anchorY);
                 } else {
-                    // No image placeholder — draw gradient
                     const grad = ctx.createLinearGradient(zone.x, zone.y, zone.x + zone.w, zone.y + zone.h);
                     grad.addColorStop(0, theme.bg);
                     grad.addColorStop(1, '#000000');
@@ -373,6 +442,5 @@ export function renderPoster({ canvas, state }) {
         ctx.restore();
     }
 
-    // Return layout info for display
     return { layout };
 }

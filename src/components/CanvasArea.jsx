@@ -1,41 +1,40 @@
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { renderPoster } from '../lib/posterRenderer';
-
-// ============================================================
-// CanvasAreaWithRef — Imperative, event-driven canvas renderer
-//
-// The canvas is painted via a stable `stableRender(freshState)` fn
-// registered once on mount (via onRenderReady).
-// usePosterState holds this fn and calls it directly on every event.
-// Zero React re-render cycle for canvas updates.
-// ============================================================
+import { WORKSPACE_COPY } from '../config/appConfig';
 
 export const CanvasAreaWithRef = forwardRef(function CanvasAreaWithRef(props, ref) {
-    const { state, onStatusUpdate, onLayoutLabel, onRenderReady } = props;
+    const { state, formatLabel, formatDescription, onStatusUpdate, onLayoutLabel, onRenderReady } = props;
 
     const canvasRef = useRef(null);
     const rafRef = useRef(null);
     const onStatusUpdateRef = useRef(onStatusUpdate);
     const onLayoutLabelRef = useRef(onLayoutLabel);
+    const latestStateRef = useRef(state);
     const [layoutLabel, setLayoutLabel] = useState('');
 
-    // Keep callback refs current so stableRender never closes over stale fns
-    useEffect(() => { onStatusUpdateRef.current = onStatusUpdate; }, [onStatusUpdate]);
-    useEffect(() => { onLayoutLabelRef.current = onLayoutLabel; }, [onLayoutLabel]);
+    useEffect(() => {
+        latestStateRef.current = state;
+    }, [state]);
 
-    // ── Scale canvas CSS size to fit viewport ──────────────────────────────
-    const scaleCanvas = (canvas) => {
+    useEffect(() => {
+        onStatusUpdateRef.current = onStatusUpdate;
+    }, [onStatusUpdate]);
+
+    useEffect(() => {
+        onLayoutLabelRef.current = onLayoutLabel;
+    }, [onLayoutLabel]);
+
+    const scaleCanvas = useCallback((canvas) => {
         if (!canvas) return;
+
         const wrapper = canvas.parentElement;
         const maxH = window.innerHeight * 0.72;
-        const maxW = (wrapper?.parentElement?.clientWidth ?? 700) - 48;
+        const maxW = (wrapper?.parentElement?.clientWidth ?? 760) - 48;
         const scale = Math.min(maxW / canvas.width, maxH / canvas.height, 1);
         canvas.style.width = `${canvas.width * scale}px`;
         canvas.style.height = `${canvas.height * scale}px`;
-    };
+    }, []);
 
-    // ── STABLE RENDER — created ONCE, called imperatively by usePosterState ──
-    // Uses rAF to batch rapid calls (e.g. multiple images loading quickly).
     const stableRender = useCallback((freshState) => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
@@ -43,11 +42,10 @@ export const CanvasAreaWithRef = forwardRef(function CanvasAreaWithRef(props, re
             const canvas = canvasRef.current;
             if (!canvas) return;
 
-            // Trigger CSS pop animation imperatively
             const wrapper = canvas.parentElement;
             if (wrapper) {
                 wrapper.classList.remove('shuffling');
-                void wrapper.offsetWidth; // trigger reflow
+                void wrapper.offsetWidth;
                 wrapper.classList.add('shuffling');
             }
 
@@ -57,68 +55,82 @@ export const CanvasAreaWithRef = forwardRef(function CanvasAreaWithRef(props, re
             const label = result?.layout?.label || '';
             setLayoutLabel(label);
             onLayoutLabelRef.current?.(label);
-            onStatusUpdateRef.current?.(label ? `Layout: ${label}` : 'Ready', 'success');
+            onStatusUpdateRef.current?.(label ? `Layout ready: ${label}` : 'Preview updated.', 'success');
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // empty deps — intentionally stable forever
+    }, [scaleCanvas]);
 
-    // ── STABLE DOWNLOAD ────────────────────────────────────────────────────
     const stableDownload = useCallback((brandName) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
+
         const link = document.createElement('a');
         const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-        const brand = (brandName || 'poster').replace(/\s+/g, '_');
-        link.download = `${brand}_${date}_poster.png`;
+        const safeBrand = (brandName || 'poster')
+            .trim()
+            .replace(/[^\w-]+/g, '_')
+            .replace(/^_+|_+$/g, '') || 'poster';
+
+        link.download = `${safeBrand}_${date}_poster.png`;
         link.href = canvas.toDataURL('image/png');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        onStatusUpdateRef.current?.('Downloaded!', 'success');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        onStatusUpdateRef.current?.('PNG downloaded.', 'success');
     }, []);
 
-    // Register render fn with parent once on mount
     useEffect(() => {
         onRenderReady?.(stableRender);
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Expose download via ref (parent calls canvasRef.current.download())
-    // We use a latestState ref so download always uses the freshest brandName
-    const latestStateRef = useRef(state);
-    latestStateRef.current = state;
+    }, [onRenderReady, stableRender]);
 
     useImperativeHandle(ref, () => ({
         download: () => stableDownload(latestStateRef.current?.brandName),
-    }), []); // eslint-disable-line react-hooks/exhaustive-deps
+    }), [stableDownload]);
 
-    // Resize only on window resize — no re-render of canvas
     useEffect(() => {
-        const h = () => scaleCanvas(canvasRef.current);
-        window.addEventListener('resize', h);
-        return () => window.removeEventListener('resize', h);
-    }, []);
+        const handleResize = () => scaleCanvas(canvasRef.current);
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
+    }, [scaleCanvas]);
+
+    const isEmpty = state.images.length === 0 && !state.headline.trim() && !state.subtext.trim();
 
     return (
-        <main className="canvas-area">
-            <div className="canvas-top-bar" style={{ justifyContent: 'flex-start' }}>
-                <div className="preview-label">Preview</div>
-            </div>
-
-            <div id="poster-wrapper">
-                <canvas
-                    id="poster-canvas"
-                    ref={canvasRef}
-                    width={1080}
-                    height={state.format === 'story' ? 1920 : 1080}
-                />
+        <main className="canvas-area" aria-label="Poster preview workspace">
+            <div className="canvas-top-bar">
+                <div>
+                    <div className="preview-label">Live Preview</div>
+                    <div className="preview-meta">{formatLabel} canvas · {formatDescription}</div>
+                </div>
                 {layoutLabel && (
-                    <div className="layout-badge">{layoutLabel}</div>
+                    <div className="layout-chip">{layoutLabel}</div>
                 )}
             </div>
 
-            <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 420 }}>
-                Renders at full 1080px. Download for Instagram, TikTok, Twitter or any social platform.
+            <section className="preview-stage">
+                <div id="poster-wrapper" className="poster-wrapper">
+                    <canvas
+                        id="poster-canvas"
+                        ref={canvasRef}
+                        width={1080}
+                        height={state.format === 'story' ? 1920 : 1080}
+                    />
+                    {layoutLabel && (
+                        <div className="layout-badge">{layoutLabel}</div>
+                    )}
+                    {isEmpty && (
+                        <div className="empty-preview-state">
+                            <div className="empty-preview-title">Your poster preview will appear here.</div>
+                            <div className="empty-preview-copy">Add a headline, upload images, then shuffle layouts to explore compositions.</div>
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            <div className="canvas-hint">
+                {isEmpty ? WORKSPACE_COPY.previewEmpty : WORKSPACE_COPY.previewReady}
             </div>
         </main>
     );

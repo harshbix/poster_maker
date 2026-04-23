@@ -6,10 +6,10 @@ export const INITIAL_STATE = {
     layoutSeed: 1,
     layoutHistory: [],
     currentLayoutLabel: '',
-    headline: '*MANCHESTER CITY* IN DANGER OF RELEGATION FROM THE EPL',
-    subtext: 'Club sits 15th with 8 consecutive losses this season',
-    brandName: 'FAROLS',
-    customBadge: 'NEWS',
+    headline: '',
+    subtext: '',
+    brandName: '',
+    customBadge: 'Top Story',
     style: 'dark-blue',
     accentColor: '#00d4ff',
     format: 'square',
@@ -17,24 +17,60 @@ export const INITIAL_STATE = {
 
 let _imgIdCounter = 0;
 
+const DEFAULT_IMAGE_ADJUSTMENTS = {
+    zoom: 1,
+    offsetX: 0,
+    offsetY: 0,
+};
+
+function isImageFile(file) {
+    return Boolean(file?.type?.startsWith('image/'));
+}
+
+function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+        if (!file) {
+            reject(new Error('Missing file.'));
+            return;
+        }
+
+        if (!isImageFile(file)) {
+            reject(new Error(`"${file.name}" is not an image file.`));
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onerror = () => reject(new Error(`Could not read "${file.name}".`));
+        reader.onload = (ev) => {
+            const img = new Image();
+            const id = `img_${++_imgIdCounter}`;
+
+            img.onload = () => resolve({
+                img,
+                id,
+                src: ev.target?.result,
+                name: file.name,
+                ...DEFAULT_IMAGE_ADJUSTMENTS,
+            });
+
+            img.onerror = () => reject(new Error(`Could not load "${file.name}" as an image.`));
+            img.src = ev.target?.result;
+        };
+
+        reader.readAsDataURL(file);
+    });
+}
+
 export function usePosterState() {
     const [state, setState] = useState(INITIAL_STATE);
-    const stateRef = useRef(INITIAL_STATE); // always current
-    const renderRef = useRef(null);           // imperative canvas render fn
+    const stateRef = useRef(INITIAL_STATE);
+    const renderRef = useRef(null);
 
-    /** CanvasArea registers its render fn here once on mount */
     const setRenderFn = useCallback((fn) => {
         renderRef.current = fn;
     }, []);
 
-    /** Apply a patch to stateRef and React state — NO canvas repaint */
-    const set = useCallback((patch) => {
-        const next = { ...stateRef.current, ...patch };
-        stateRef.current = next;
-        setState(next);
-    }, []);
-
-    /** Apply a patch AND immediately repaint the canvas */
     const update = useCallback((patch) => {
         const next = { ...stateRef.current, ...patch };
         stateRef.current = next;
@@ -42,31 +78,59 @@ export function usePosterState() {
         renderRef.current?.(next);
     }, []);
 
-    /** Image loaded → update React state (for chips) + repaint immediately */
-    const addImageFromFile = useCallback((file) => {
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const img = new Image();
-            const id = `img_${++_imgIdCounter}`;
-            img.onload = () => {
-                const images = [...stateRef.current.images, { img, src: ev.target.result, id }];
-                const next = { ...stateRef.current, images };
-                stateRef.current = next;
-                setState(next);
-                renderRef.current?.(next); // render immediately — no React cycle
-            };
-            img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
+    const addImageFromFile = useCallback(async (file) => {
+        const imageItem = await loadImageFromFile(file);
+        const images = [...stateRef.current.images, imageItem];
+        const next = { ...stateRef.current, images };
+        stateRef.current = next;
+        setState(next);
+        renderRef.current?.(next);
+        return imageItem;
     }, []);
 
-    const addMultipleImages = useCallback((files) => {
-        Array.from(files).forEach(addImageFromFile);
-    }, [addImageFromFile]);
+    const addMultipleImages = useCallback(async (files) => {
+        const incomingFiles = Array.from(files ?? []);
+        const results = await Promise.allSettled(incomingFiles.map(loadImageFromFile));
+        const added = results
+            .filter(result => result.status === 'fulfilled')
+            .map(result => result.value);
+        const errors = results
+            .filter(result => result.status === 'rejected')
+            .map(result => result.reason?.message || 'Image import failed.');
+
+        if (added.length > 0) {
+            const images = [...stateRef.current.images, ...added];
+            const next = { ...stateRef.current, images };
+            stateRef.current = next;
+            setState(next);
+            renderRef.current?.(next);
+        }
+
+        return { added, errors };
+    }, []);
 
     const removeImage = useCallback((id) => {
         const images = stateRef.current.images.filter(i => i.id !== id);
+        const next = { ...stateRef.current, images };
+        stateRef.current = next;
+        setState(next);
+        renderRef.current?.(next);
+    }, []);
+
+    const updateImageAdjustments = useCallback((id, patch) => {
+        const images = stateRef.current.images.map((image) => (
+            image.id === id ? { ...image, ...patch } : image
+        ));
+        const next = { ...stateRef.current, images };
+        stateRef.current = next;
+        setState(next);
+        renderRef.current?.(next);
+    }, []);
+
+    const resetImageAdjustments = useCallback((id) => {
+        const images = stateRef.current.images.map((image) => (
+            image.id === id ? { ...image, ...DEFAULT_IMAGE_ADJUSTMENTS } : image
+        ));
         const next = { ...stateRef.current, images };
         stateRef.current = next;
         setState(next);
@@ -83,11 +147,21 @@ export function usePosterState() {
         renderRef.current?.(next);
     }, []);
 
-    /** Called by CanvasArea after each render to cache the layout label */
     const setLayoutLabel = useCallback((label) => {
         stateRef.current = { ...stateRef.current, currentLayoutLabel: label };
-        // No setState needed — only status bar text uses this
     }, []);
 
-    return { state, stateRef, set, update, setRenderFn, addImageFromFile, addMultipleImages, removeImage, shuffle, setLayoutLabel };
+    return {
+        state,
+        stateRef,
+        update,
+        setRenderFn,
+        addImageFromFile,
+        addMultipleImages,
+        removeImage,
+        updateImageAdjustments,
+        resetImageAdjustments,
+        shuffle,
+        setLayoutLabel,
+    };
 }
